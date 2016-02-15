@@ -10,6 +10,25 @@ MODULE_DESCRIPTION("CS-423 MP1");
 
 #define DEBUG 1
 
+#define FILENAME "status"
+#define DIRECTORY "mp1"
+static struct proc_dir_entry *proc_dir;
+static struct proc_dir_entry *proc_entry;
+
+static ssize_t mp1_read (struct file *file, char user *buffer, size_t count, loff_t *data){
+// implementation goes here... 
+}
+
+static ssize_t mp1_write (struct file *file, const char user *buffer, size_t count, loff_t *data){
+// implementation goes here...
+}
+
+static const struct file_operations mp1_file = {
+   .owner = THIS_MODULE,
+   .read =mp1_read,
+   .write = mp1_write,
+};
+
 // mp1_init - Called when module is loaded
 int __init mp1_init(void)
 {
@@ -17,9 +36,10 @@ int __init mp1_init(void)
    printk(KERN_ALERT "MP1 MODULE LOADING\n");
    #endif
    // Insert your code here ...
-   // ANDREW's TEST
-   
-   
+
+   proc_dir = proc_mkdir(DIRECTORY, NULL);
+   proc_entry = proc_create(FILENAME, 0666, proc_dir, & mp1_file);
+
    printk(KERN_ALERT "MP1 MODULE LOADED\n");
    return 0;   
 }
@@ -32,7 +52,8 @@ void __exit mp1_exit(void)
    #endif
    // Insert your code here ...
    
-   
+   remove_proc_entry(FILENAME, proc_entry);
+   remove_proc_entry(DIRECTORY, proc_dir);
 
    printk(KERN_ALERT "MP1 MODULE UNLOADED\n");
 }
