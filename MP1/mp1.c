@@ -74,7 +74,7 @@ void __exit mp1_exit(void)
    
    remove_proc_entry(FILENAME, proc_entry);
    remove_proc_entry(DIRECTORY, proc_dir);
-   del_timer(&timer);
+   del_timer(&my_timer);
 
    printk(KERN_ALERT "MP1 MODULE UNLOADED\n");
 }
