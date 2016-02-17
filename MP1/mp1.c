@@ -15,17 +15,17 @@ MODULE_DESCRIPTION("CS-423 MP1");
 static struct proc_dir_entry *proc_dir;
 static struct proc_dir_entry *proc_entry;
 
-static ssize_t mp1_read (struct file *file, char user *buffer, size_t count, loff_t *data){
+static ssize_t mp1_read (struct file *file, char __user *buffer, size_t count, loff_t *data){
 // implementation goes here... 
 }
 
-static ssize_t mp1_write (struct file *file, const char user *buffer, size_t count, loff_t *data){
+static ssize_t mp1_write (struct file *file, const char __user *buffer, size_t count, loff_t *data){
 // implementation goes here...
 }
 
 static const struct file_operations mp1_file = {
    .owner = THIS_MODULE,
-   .read =mp1_read,
+   .read = mp1_read,
    .write = mp1_write,
 };
 
