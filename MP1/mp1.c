@@ -18,6 +18,8 @@ static struct proc_dir_entry *proc_entry;
 
 static struct timer_list my_timer;
 
+static struct workqueue_struct update_workqueue;
+
 static ssize_t mp1_read (struct file *file, char __user *buffer, size_t count, loff_t *data){
 // implementation goes here... 
 }
@@ -31,6 +33,19 @@ static const struct file_operations mp1_file = {
    .read = mp1_read,
    .write = mp1_write,
 };
+
+static void update_workqueue_init()
+{
+   if(!update_workqueue)
+   {
+      update_workqueue = create_workqueue("update_workqueue");
+   }
+
+   struct work_struct update_time;
+   INIT_WORK(&update_time, _worker_);
+   queue_work(update_workqueue, &update_time);
+}
+
 
 static void interrupt_handler (){
    mod_timer(&my_timer, jiffies + msecs_to_jiffies(5000));
