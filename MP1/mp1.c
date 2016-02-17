@@ -3,7 +3,8 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/timer.h>
-#include <linux/proc_fs.h>  
+#include <linux/proc_fs.h>
+#include <linux/workqueue.h> 
 #include "mp1_given.h"
 
 MODULE_LICENSE("GPL");
@@ -24,13 +25,12 @@ typedef struct list{
 	list_head node;
 	int data;
 	void * voidP;
-}list_t;
+} list_t;
 
 static struct proc_dir_entry *proc_dir;
 static struct proc_dir_entry *proc_entry;
 static struct timer_list my_timer;
 static struct workqueue_struct update_workqueue;
-
 
 list_t * t;
 list_head tail;
@@ -40,8 +40,6 @@ static ssize_t mp1_read(struct file *file, char __user * buffer, size_t count, l
 	char * buf;
 	buf = (char*) kmalloc( count, GFP_KERNEL);
 	copied = 0;
-	
-	
 	copy_to_user(buffer, buf, copied);
 	kfree(buf);
 	return copied;
@@ -78,7 +76,7 @@ static void update_workqueue_init()
 
 static void interrupt_handler (){
    mod_timer(&my_timer, jiffies + msecs_to_jiffies(5000));
-// interrupt handler here => update register information
+   update_workqueue_init();
 }
 
 static void create_my_timer {
@@ -125,6 +123,10 @@ void __exit mp1_exit(void)
    remove_proc_entry(FILENAME, proc_entry);
    remove_proc_entry(DIRECTORY, proc_dir);
    del_timer(&my_timer);
+
+   flush_workqueue(update_workqueue);
+   destroy_workqueue(update_workqueue);
+   
    printk(KERN_ALERT "MP1 MODULE UNLOADED\n");
 }
 
