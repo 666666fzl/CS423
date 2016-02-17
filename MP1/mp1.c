@@ -26,6 +26,10 @@ typedef struct list{
 	void * voidP;
 }list_t;
 
+static struct proc_dir_entry *proc_dir;
+static struct proc_dir_entry *proc_entry;
+static struct timer_list my_timer;
+static struct workqueue_struct update_workqueue;
 
 
 list_t * t;
@@ -51,13 +55,7 @@ static ssize_t mp1_write(struct file *file, char __user *buffer, size_t count, l
 	tail->next->prev = tail;
 	tail = tail->next;
 	tail->myitem = buf;
-	
-static struct proc_dir_entry *proc_dir;
-static struct proc_dir_entry *proc_entry;
-
-static struct timer_list my_timer;
-
-static struct workqueue_struct update_workqueue;
+}	
 
 static const struct file_operations mp1_file = {
    .owner = THIS_MODULE,
