@@ -2,6 +2,7 @@
 
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/timer.h>
 #include "mp1_given.h"
 
 MODULE_LICENSE("GPL");
@@ -14,6 +15,8 @@ MODULE_DESCRIPTION("CS-423 MP1");
 #define DIRECTORY "mp1"
 static struct proc_dir_entry *proc_dir;
 static struct proc_dir_entry *proc_entry;
+
+static struct timer_list my_timer;
 
 static ssize_t mp1_read (struct file *file, char __user *buffer, size_t count, loff_t *data){
 // implementation goes here... 
@@ -29,6 +32,19 @@ static const struct file_operations mp1_file = {
    .write = mp1_write,
 };
 
+static void interrupt_handler (){
+   mod_timer(&my_timer, jiffies + msecs_to_jiffies(5000));
+// interrupt handler here => update register information
+}
+
+static void create_my_timer {
+   init_timer(&my_timer);
+   my_timer.data = 0;
+   my_timer.expires = jiffies + msecs_to_jiffies(5000);
+   my_timer.function = interrupt_handler;
+   add_timer(&my_timer);
+}
+
 // mp1_init - Called when module is loaded
 int __init mp1_init(void)
 {
@@ -37,8 +53,12 @@ int __init mp1_init(void)
    #endif
    // Insert your code here ...
 
+   // create proc directory and file entry
    proc_dir = proc_mkdir(DIRECTORY, NULL);
    proc_entry = proc_create(FILENAME, 0666, proc_dir, & mp1_file);
+
+   // create Linux Kernel Timer
+   create_my_timer();
 
    printk(KERN_ALERT "MP1 MODULE LOADED\n");
    return 0;   
@@ -54,6 +74,7 @@ void __exit mp1_exit(void)
    
    remove_proc_entry(FILENAME, proc_entry);
    remove_proc_entry(DIRECTORY, proc_dir);
+   del_timer(&timer);
 
    printk(KERN_ALERT "MP1 MODULE UNLOADED\n");
 }
