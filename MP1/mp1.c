@@ -43,6 +43,7 @@ static ssize_t mp1_read(struct file *file, char __user * buffer, size_t count, l
 	list_head * tmp = &t->node;
 	while( tmp !=NULL){
 		strcat(buf, tmp->myitem);
+		tmp = tmp->next;
 	}
 	copy_to_user(buffer, buf, copied);
 	kfree(buf);
