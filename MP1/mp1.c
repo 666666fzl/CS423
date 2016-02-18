@@ -4,7 +4,9 @@
 #include <linux/kernel.h>
 #include <linux/timer.h>
 #include <linux/proc_fs.h>
-#include <linux/workqueue.h> 
+#include <linux/workqueue.h>
+#include <linux/slab.h>
+#include <asm/uaccess.h>
 #include "mp1_given.h"
 
 MODULE_LICENSE("GPL");
