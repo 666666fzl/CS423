@@ -96,8 +96,8 @@ int __init mp1_init(void)
    // Insert your code here ...
   
 	list = kmalloc(sizeof(list), GFP_KERNEL);
-	list->voidP = NULL= NULL;
-	list->node.myitem = getpid();
+	list->voidP = NULL;
+	list->node.myitem = NULL;
 	list->node.next = NULL;
 	list->node.prev = NULL;
  	tail = &list->node;
