@@ -38,8 +38,12 @@ list_head tail;
 static ssize_t mp1_read(struct file *file, char __user * buffer, size_t count, loff_t * data){
 	int copied;
 	char * buf;
-	buf = (char*) kmalloc( count, GFP_KERNEL);
+	buf = (char*) kcalloc( 1, count, GFP_KERNEL);
 	copied = 0;
+	list_head * tmp = &t->node;
+	while( tmp !=NULL){
+		strcat(buf, tmp->myitem);
+	}
 	copy_to_user(buffer, buf, copied);
 	kfree(buf);
 	return copied;
@@ -53,6 +57,7 @@ static ssize_t mp1_write(struct file *file, char __user *buffer, size_t count, l
 	tail->next->prev = tail;
 	tail = tail->next;
 	tail->myitem = buf;
+	tail->next = NULL;
 }	
 
 static const struct file_operations mp1_file = {
