@@ -45,15 +45,16 @@ static ssize_t mp1_read(struct file *file, char __user * buffer, size_t count, l
 	copied = 0;
 	list_t * tmp = list_entry(&pidList, list_t, data);
 	strcpy(buf, tmp->data);
-	copy_to_user(buffer, buf, copied);
+	copied = copy_to_user(buffer, buf, count);
 	kfree(buf);
 	return copied;
 }
 
 static ssize_t mp1_write(struct file *file, char __user *buffer, size_t count, loff_t * data){
 	char * buf = (char*)kmalloc(count, GFP_KERNEL);
-	copy_from_user(buf, buffer, count);
+	ssize_t ret = copy_from_user(buf, buffer, count);
 	list_add_tail(buf, &pidList.node);
+	return ret;
 }	
 
 static const struct file_operations mp1_file = {
