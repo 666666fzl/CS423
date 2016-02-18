@@ -4,9 +4,9 @@
 #include <linux/kernel.h>
 #include <linux/timer.h>
 #include <linux/proc_fs.h>
-#include <linux/workqueue.h> 
-#include <linux/list.h>
+#include <linux/workqueue.h>
 #include <linux/slab.h>
+#include <linux/list.h>
 #include <asm/uaccess.h>
 #include "mp1_given.h"
 
@@ -18,15 +18,9 @@ MODULE_DESCRIPTION("CS-423 MP1");
 #define FILENAME "status"
 #define DIRECTORY "mp1"
 
-//typedef struct list_head{
-//	void *myitem;
-//	struct list_head * next;
-//	struct list_head * prev;
-//} list_head;
-
 typedef struct list_t{
-	list_head node;
-	int data;
+	struct list_head node;
+	char * data;
 	void * voidP;
 } list_t;
 
@@ -34,17 +28,16 @@ static struct proc_dir_entry *proc_dir;
 static struct proc_dir_entry *proc_entry;
 static struct timer_list my_timer;
 static struct workqueue_struct update_workqueue;
-
 list_t pidList;
-list_head tail;
+struct list_head tail;
 
 static ssize_t mp1_read(struct file *file, char __user * buffer, size_t count, loff_t * data){
 	int copied;
 	char * buf;
-	buf = (char*) kcalloc( 1, count, GFP_KERNEL);
-	copied = 0;
-	list_t * tmp = list_entry(&pidList, list_t, data);
-	strcpy(buf, tmp->data);
+	list_t *tmp = NULL;
+   buf = (char*) kcalloc( 1, count, GFP_KERNEL);
+	tmp = list_entry(&(pidList.node), list_t, node);
+	memcpy(buf, tmp->data, strlen(tmp->data));
 	copied = copy_to_user(buffer, buf, count);
 	kfree(buf);
 	return copied;
@@ -53,7 +46,8 @@ static ssize_t mp1_read(struct file *file, char __user * buffer, size_t count, l
 static ssize_t mp1_write(struct file *file, char __user *buffer, size_t count, loff_t * data){
 	char * buf = (char*)kmalloc(count, GFP_KERNEL);
 	ssize_t ret = copy_from_user(buf, buffer, count);
-	list_add_tail(buf, &pidList.node);
+   insert_node->data = buf;
+	list_add_tail(&(insert_node->node), &(pidList.node));
 	return ret;
 }	
 
@@ -92,13 +86,13 @@ static void create_my_timer {
 // mp1_init - Called when module is loaded
 int __init mp1_init(void)
 {
+
+   LIST_HEAD(pidList); 
+
    #ifdef DEBUG
    printk(KERN_ALERT "MP1 MODULE LOADING\n");
    #endif
    // Insert your code here ...
- 
-	LIST_HEAD(pidList); 
-
    // create proc directory and file entry
    proc_dir = proc_mkdir(DIRECTORY, NULL);
    proc_entry = proc_create(FILENAME, 0666, proc_dir, & mp1_file);
