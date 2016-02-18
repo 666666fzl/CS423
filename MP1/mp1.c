@@ -6,6 +6,8 @@
 #include <linux/proc_fs.h>
 #include <linux/workqueue.h> 
 #include <linux/list.h>
+#include <linux/slab.h>
+#include <asm/uaccess.h>
 #include "mp1_given.h"
 
 MODULE_LICENSE("GPL");
