@@ -44,7 +44,8 @@ static ssize_t mp1_read(struct file *file, char __user * buffer, size_t count, l
 }
 
 static ssize_t mp1_write(struct file *file, char __user *buffer, size_t count, loff_t * data){
-	char * buf = (char*)kmalloc(count, GFP_KERNEL);
+	list_t *insert_node = (list_t*)kmalloc(sizeof(list_t), GFP_KERNEL);
+   char * buf = (char*)kmalloc(count, GFP_KERNEL);
 	ssize_t ret = copy_from_user(buf, buffer, count);
    insert_node->data = buf;
 	list_add_tail(&(insert_node->node), &(pidList.node));
