@@ -27,7 +27,7 @@ typedef struct list_t{
 static struct proc_dir_entry *proc_dir;
 static struct proc_dir_entry *proc_entry;
 static struct timer_list my_timer;
-static struct workqueue_struct update_workqueue;
+static struct workqueue_struct * update_workqueue;
 list_t pidList;
 struct list_head tail;
 
@@ -58,6 +58,8 @@ static const struct file_operations mp1_file = {
    .write = mp1_write,
 };
 
+
+
 static void update_workqueue_init()
 {
    if(!update_workqueue)
@@ -76,7 +78,7 @@ static void interrupt_handler (){
    update_workqueue_init();
 }
 
-static void create_my_timer {
+static void create_my_timer() {
    init_timer(&my_timer);
    my_timer.data = 0;
    my_timer.expires = jiffies + msecs_to_jiffies(5000);
