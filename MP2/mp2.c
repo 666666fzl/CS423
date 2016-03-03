@@ -115,15 +115,15 @@ int admission_control(struct file *file, const char __user *buffer, size_t count
     printk(KERN_ALERT "mp2_write called, pid: %s", buf);
 
     // Check the starting char of buf, if:
-    // 1) R: register
+    // 1) register: R,PID,PERIOD,COMPUTATION
     if (buf[0] == 'R') {
         ret = add_to_list(buf+2);
     }
     else if (buf[0] == 'Y'){
-    // 2) Y: yield
+    // 2) yield: Y,PID 
     }
     else if (buf[0] == 'D') {
-    // 3) D: unregister
+    // 3) unregister: D,PID
         ret = delete_from_list(buf+2);
     }
     else {
