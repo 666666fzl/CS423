@@ -40,12 +40,12 @@ int main(int argc, char* argv[])
         return -1; 
     }
 
-    char *cmd = argv[2]
+    char *cmd = argv[2];
     char *write_path = argv[1];
+
     if (*cmd == 'r') {
         reg (write_path);
     }
-    else if (*cmd == 'd') {
         pid_t pid = atoi(argv[3]);
         unreg (write_path, pid);
     }
