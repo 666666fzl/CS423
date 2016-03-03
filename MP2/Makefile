@@ -12,10 +12,10 @@ all: clean modules app
 obj-m:= mp2.o
 
 modules:
-    $(MAKE) -C $(KERNEL_SRC) M=$(SUBDIR) modules
+	$(MAKE) -C $(KERNEL_SRC) M=$(SUBDIR) modules
 
 app: userapp.c userapp.h
-    $(GCC) -o userapp userapp.c
+	$(GCC) -o userapp userapp.c
 
 clean:
-    $(RM) -f userapp *~ *.ko *.o *.mod.c Module.symvers modules.order
+	$(RM) -f userapp *~ *.ko *.o *.mod.c Module.symvers modules.order
