@@ -46,6 +46,7 @@ int main(int argc, char* argv[])
     if (*cmd == 'r') {
         reg (write_path);
     }
+    else if (*cmd == 'd') {
         pid_t pid = atoi(argv[3]);
         unreg (write_path, pid);
     }
