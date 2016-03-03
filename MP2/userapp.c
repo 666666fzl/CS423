@@ -40,12 +40,12 @@ int main(int argc, char* argv[])
         return -1; 
     }
 
-    char cmd = argv[1]
+    char *cmd = argv[1];
     char *write_path = argv[2];
-    if (cmd == 'r') {
+    if (*cmd == 'r') {
         reg (write_path);
     }
-    else if (cmd == 'd') {
+    else if (*cmd == 'd') {
         unreg (write_path);
     }
     else{
