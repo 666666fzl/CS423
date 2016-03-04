@@ -81,15 +81,15 @@ int delete_from_list(char *pid)
 {
     struct list_head *pos;
     struct list_head *next;
-    struct list_node_t *curr;
+    list_node_t *curr;
     mutex_lock(&my_mutex);
 
     list_for_each_safe(pos, next, &pidList){
-        curr = list_entry(pos, struct list_node_t, node);
+        curr = list_entry(pos, list_node_t, node);
         if(strcmp(curr->data, pid)==0)
         {
             list_del(pos);
-            kfree(list_entry(pos, struct list_node_t, node));
+            kfree(list_entry(pos, list_node_t, node));
         }
     }
 
@@ -142,13 +142,13 @@ static ssize_t mp2_write(struct file *file, const char __user *buffer, size_t co
 static void my_worker(struct work_struct * work) {
 //      unsigned long cpu_time;
     struct list_head *pos;
-    struct list_node_t *tmp = NULL;
+    list_node_t *tmp = NULL;
     unsigned int base = 10;
     int pid;
     printk(KERN_ALERT "my_woker func called");
     mutex_lock(&my_mutex);
     list_for_each(pos, &pidList) {
-        tmp = list_entry(pos, struct list_node_t, node);
+        tmp = list_entry(pos, list_node_t, node);
         kstrtoint(tmp->data, base, &pid);
         printk(KERN_ALERT "%d", pid);
     /*  if(get_cpu_use(pid, &cpu_time) == 0) {
@@ -233,7 +233,7 @@ void __exit mp2_exit(void)
     // remove every node on linked list and remove the list     
     list_for_each_safe(pos, next, &pidList){
         list_del(pos);
-        kfree(list_entry(pos, struct list_node_t, node));
+        kfree(list_entry(pos, list_node_t, node));
     }
 
     // remove file entry and repository  
