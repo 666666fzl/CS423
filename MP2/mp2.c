@@ -23,8 +23,7 @@ typedef struct list_t{
     struct list_head node;
     char * data;
     unsigned long cpu_time;
-} list_t;
-
+} list_node_t;
 
 static struct proc_dir_entry *proc_dir;
 static struct proc_dir_entry *proc_entry;
@@ -39,14 +38,14 @@ static ssize_t mp2_read(struct file *file, char __user * buffer, size_t count, l
     size_t copied = 0;
     char * buf = NULL;
     struct list_head *pos = NULL;
-    list_t *tmp = NULL;
+    list_node_t *tmp = NULL;
     char *pidInList = NULL;
     char currData[MAX_BUF_SIZE];
     int currByte;
     buf = (char*) kmalloc(1024, GFP_KERNEL);
     mutex_lock(&my_mutex);
     list_for_each(pos, &pidList) {
-        tmp = list_entry(pos, struct list_t, node);
+        tmp = list_entry(pos, list_node_t, node);
         pidInList = tmp->data;
         memset(currData, 0, MAX_BUF_SIZE);
         currByte = sprintf(currData, "%s: %lu\n", tmp->data, tmp->cpu_time);
@@ -69,7 +68,7 @@ static ssize_t mp2_read(struct file *file, char __user * buffer, size_t count, l
 
 int add_to_list(char *buf)
 {
-    list_t *insert_node = (list_t*)kmalloc(sizeof(list_t), GFP_KERNEL);
+    list_node_t *insert_node = (list_node_t*)kmalloc(sizeof(list_node_t), GFP_KERNEL);
     insert_node->data = buf;
     insert_node->cpu_time = 0;
     mutex_lock(&my_mutex);
@@ -82,15 +81,15 @@ int delete_from_list(char *pid)
 {
     struct list_head *pos;
     struct list_head *next;
-    struct list_t *curr;
+    struct list_node_t *curr;
     mutex_lock(&my_mutex);
 
     list_for_each_safe(pos, next, &pidList){
-        curr = list_entry(pos, struct list_t, node);
+        curr = list_entry(pos, struct list_node_t, node);
         if(strcmp(curr->data, pid)==0)
         {
             list_del(pos);
-            kfree(list_entry(pos, struct list_t, node));
+            kfree(list_entry(pos, struct list_node_t, node));
         }
     }
 
@@ -143,13 +142,13 @@ static ssize_t mp2_write(struct file *file, const char __user *buffer, size_t co
 static void my_worker(struct work_struct * work) {
 //      unsigned long cpu_time;
     struct list_head *pos;
-    struct list_t *tmp = NULL;
+    struct list_node_t *tmp = NULL;
     unsigned int base = 10;
     int pid;
     printk(KERN_ALERT "my_woker func called");
     mutex_lock(&my_mutex);
     list_for_each(pos, &pidList) {
-        tmp = list_entry(pos, struct list_t, node);
+        tmp = list_entry(pos, struct list_node_t, node);
         kstrtoint(tmp->data, base, &pid);
         printk(KERN_ALERT "%d", pid);
     /*  if(get_cpu_use(pid, &cpu_time) == 0) {
@@ -234,7 +233,7 @@ void __exit mp2_exit(void)
     // remove every node on linked list and remove the list     
     list_for_each_safe(pos, next, &pidList){
         list_del(pos);
-        kfree(list_entry(pos, struct list_t, node));
+        kfree(list_entry(pos, struct list_node_t, node));
     }
 
     // remove file entry and repository  
