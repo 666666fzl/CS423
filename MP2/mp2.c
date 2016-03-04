@@ -9,6 +9,7 @@
 #include <linux/list.h>
 #include <asm/uaccess.h>
 #include <linux/mutex.h>
+#include <linux/sched.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("23");
@@ -19,23 +20,30 @@ MODULE_DESCRIPTION("CS-423 MP2");
 #define DIRECTORY "mp2"
 #define MAX_BUF_SIZE 128
 
-typedef struct list_t{
-    struct list_head node;
-    char * data;
-    unsigned long cpu_time;
-} list_node_t;
+typedef struct mp2_task_struct {
+	struct task_struct* linux_task;
+	struct timer_list wakeup_timer;
+	pid_t pid;
+	unsigned long proc_time;
+	unsigned long period;
+} task_node_t;
 
 static struct proc_dir_entry *proc_dir;
 static struct proc_dir_entry *proc_entry;
 static struct timer_list my_timer;
 static struct workqueue_struct * update_workqueue;
 static struct mutex my_mutex;
-LIST_HEAD(pidList);
+static struct kmem_cache *task_cache;
+LIST_HEAD(taskList);
+
+void slab_ctor(void *foo) {
+	return;
+}
 
 // Called when user application use "cat" or "fopen"
 // The function read the status file and print the information related out
 static ssize_t mp2_read(struct file *file, char __user * buffer, size_t count, loff_t * data){
-    size_t copied = 0;
+    /*size_t copied = 0;
     char * buf = NULL;
     struct list_head *pos = NULL;
     list_node_t *tmp = NULL;
@@ -44,7 +52,7 @@ static ssize_t mp2_read(struct file *file, char __user * buffer, size_t count, l
     int currByte;
     buf = (char*) kmalloc(1024, GFP_KERNEL);
     mutex_lock(&my_mutex);
-    list_for_each(pos, &pidList) {
+    list_for_each(pos, &taskList) {
         tmp = list_entry(pos, list_node_t, node);
         pidInList = tmp->data;
         memset(currData, 0, MAX_BUF_SIZE);
@@ -64,27 +72,32 @@ static ssize_t mp2_read(struct file *file, char __user * buffer, size_t count, l
     *data += copied;
 
     return copied;
+	*/
+	return -1;
 }
+
 
 int add_to_list(char *buf)
 {
-    list_node_t *insert_node = (list_node_t*)kmalloc(sizeof(list_node_t), GFP_KERNEL);
+/*    task_t *new_task = (list_node_t*)kmalloc(sizeof(list_node_t), GFP_KERNEL);
     insert_node->data = buf;
     insert_node->cpu_time = 0;
     mutex_lock(&my_mutex);
-    list_add_tail(&(insert_node->node), &pidList);
+    list_add_tail(&(insert_node->node), &taskList);
     mutex_unlock(&my_mutex);
     return strlen(buf);
+*/
+	return -1;
 }
 
 int delete_from_list(char *pid)
 {
     struct list_head *pos;
     struct list_head *next;
-    list_node_t *curr;
+    task_node_t *curr;
     mutex_lock(&my_mutex);
 
-    list_for_each_safe(pos, next, &pidList){
+ /*   list_for_each_safe(pos, next, &taskList){
         curr = list_entry(pos, list_node_t, node);
         if(strcmp(curr->data, pid)==0)
         {
@@ -92,7 +105,7 @@ int delete_from_list(char *pid)
             kfree(list_entry(pos, list_node_t, node));
         }
     }
-
+*/
     mutex_unlock(&my_mutex);
     return 0;
 }
@@ -141,22 +154,23 @@ static ssize_t mp2_write(struct file *file, const char __user *buffer, size_t co
 // Get the scheduled work and work on updating the cpu use time for processes corrsponding to nodes on the linked list
 static void my_worker(struct work_struct * work) {
 //      unsigned long cpu_time;
-    struct list_head *pos;
+/*    struct list_head *pos;
     list_node_t *tmp = NULL;
     unsigned int base = 10;
     int pid;
     printk(KERN_ALERT "my_woker func called");
     mutex_lock(&my_mutex);
-    list_for_each(pos, &pidList) {
+    list_for_each(pos, &taskList) {
         tmp = list_entry(pos, list_node_t, node);
         kstrtoint(tmp->data, base, &pid);
         printk(KERN_ALERT "%d", pid);
-    /*  if(get_cpu_use(pid, &cpu_time) == 0) {
+     if(get_cpu_use(pid, &cpu_time) == 0) {
             // update each node
             tmp->cpu_time = cpu_time;
-        }*/
+        }
     }
     mutex_unlock(&my_mutex);
+*/
 }
 
 // Create a new work and put it into the schedule without delaye
@@ -201,10 +215,13 @@ int __init mp2_init(void)
     proc_entry = proc_create(FILENAME, 0666, proc_dir, & mp2_file);
 
     // create work queue
-    update_workqueue = create_workqueue("update_workqueue");
+    //update_workqueue = create_workqueue("update_workqueue");
 
     // create Linux Kernel Timer
-    _create_my_timer();
+    //_create_my_timer();
+
+	// create cache for slab allocator
+	task_cache = kmem_cache_create("task_cache", sizeof(task_node_t), 0, SLAB_HWCACHE_ALIGN, slab_ctor);
 
     // init mutex lock
     mutex_init(&my_mutex);
@@ -231,11 +248,11 @@ void __exit mp2_exit(void)
     destroy_workqueue(update_workqueue);
 
     // remove every node on linked list and remove the list     
-    list_for_each_safe(pos, next, &pidList){
+  /*  list_for_each_safe(pos, next, &taskList){
         list_del(pos);
         kfree(list_entry(pos, list_node_t, node));
     }
-
+*/
     // remove file entry and repository  
     remove_proc_entry(FILENAME, proc_dir);
     remove_proc_entry(DIRECTORY, NULL);
