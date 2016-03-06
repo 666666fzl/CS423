@@ -61,7 +61,7 @@ static ssize_t mp2_read(struct file *file, char __user * buffer, size_t count, l
     list_for_each(pos, &taskList) {
         tmp = list_entry(pos, task_node_t, process_node);
         memset(currData, 0, MAX_BUF_SIZE);
-        currByte = sprintf(currData, "%u: %lu, %lu, %lu\n", tmp->pid, tmp->period, tmp->proc_time);
+        currByte = sprintf(currData, "%u: %lu, %lu\n", tmp->pid, tmp->period, tmp->proc_time);
         strcat(buf, currData);
         copied += currByte;
     }
@@ -91,6 +91,8 @@ int add_to_list(char *buf)
     mutex_unlock(&my_mutex);
     return strlen(buf);
 */
+	struct list_head *pos;
+    task_node_t *entry;
 	int i = 0;
 	char *pch;
 	task_node_t *new_task = (task_node_t*)kmalloc(sizeof(task_node_t), GFP_KERNEL);
@@ -120,6 +122,15 @@ int add_to_list(char *buf)
 	}	
 	
 	new_task -> status = 0;
+
+    list_for_each(pos, &taskList) {
+        entry = list_entry(pos, task_node_t, process_node);
+        if (entry->period > new_task->period) {
+		    list_add_tail(&new_task->process_node, pos);
+			return -1;
+        }
+    }
+
 	list_add_tail(&(new_task->process_node), &taskList);	
 	return -1;
 }
@@ -242,7 +253,7 @@ static const struct file_operations mp2_file = {
 int __init mp2_init(void)
 {
     #ifdef DEBUG
-    printk(KERN_ALERT "MP1 MODULE LOADING\n");
+    printk(KERN_ALERT "MP2 MODULE LOADING\n");
     #endif
     // create proc directory and file entry
     proc_dir = proc_mkdir(DIRECTORY, NULL);
@@ -260,7 +271,7 @@ int __init mp2_init(void)
     // init mutex lock
     mutex_init(&my_mutex);
 
-    printk(KERN_ALERT "MP1 MODULE LOADED\n");
+    printk(KERN_ALERT "MP2 MODULE LOADED\n");
     return 0;
 }
 
@@ -271,7 +282,7 @@ void __exit mp2_exit(void)
     struct list_head *next;
 
     #ifdef DEBUG
-    printk(KERN_ALERT "MP1 MODULE UNLOADING\n");
+    printk(KERN_ALERT "MP2 MODULE UNLOADING\n");
     #endif
 
     // delete timer
@@ -291,7 +302,7 @@ void __exit mp2_exit(void)
     remove_proc_entry(FILENAME, proc_dir);
     remove_proc_entry(DIRECTORY, NULL);
 
-    printk(KERN_ALERT "MP1 MODULE UNLOADED\n");
+    printk(KERN_ALERT "MP2 MODULE UNLOADED\n");
 }
 
 // Register init and exit funtions
