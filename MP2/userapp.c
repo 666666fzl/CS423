@@ -12,7 +12,7 @@ int reg(char* write_path)
         return -1; 
     }   
     pid_t pid = getpid();
-    int byte_write = fprintf(fp, "R:%d", pid);
+    int byte_write = fprintf(fp, "R:%d %d %d", pid, 1, 1);
     fclose(fp);
     return byte_write;
 }

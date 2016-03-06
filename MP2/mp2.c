@@ -10,6 +10,7 @@
 #include <asm/uaccess.h>
 #include <linux/mutex.h>
 #include <linux/sched.h>
+#include <linux/string.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("23");
@@ -24,8 +25,13 @@ typedef struct mp2_task_struct {
 	struct task_struct* linux_task;
 	struct timer_list wakeup_timer;
 	pid_t pid;
+	// 0 = SLEEPING
+	// 1 = READY
+	// 2 = RUNNING
+	int status;
 	unsigned long proc_time;
 	unsigned long period;
+	struct list_head process_node;
 } task_node_t;
 
 static struct proc_dir_entry *proc_dir;
@@ -34,6 +40,7 @@ static struct timer_list my_timer;
 static struct workqueue_struct * update_workqueue;
 static struct mutex my_mutex;
 static struct kmem_cache *task_cache;
+
 LIST_HEAD(taskList);
 
 void slab_ctor(void *foo) {
@@ -43,24 +50,22 @@ void slab_ctor(void *foo) {
 // Called when user application use "cat" or "fopen"
 // The function read the status file and print the information related out
 static ssize_t mp2_read(struct file *file, char __user * buffer, size_t count, loff_t * data){
-    /*size_t copied = 0;
+    size_t copied = 0;
     char * buf = NULL;
     struct list_head *pos = NULL;
-    list_node_t *tmp = NULL;
-    char *pidInList = NULL;
+    task_node_t *tmp = NULL;
     char currData[MAX_BUF_SIZE];
     int currByte;
     buf = (char*) kmalloc(1024, GFP_KERNEL);
-    mutex_lock(&my_mutex);
+    //mutex_lock(&my_mutex);
     list_for_each(pos, &taskList) {
-        tmp = list_entry(pos, list_node_t, node);
-        pidInList = tmp->data;
+        tmp = list_entry(pos, task_node_t, process_node);
         memset(currData, 0, MAX_BUF_SIZE);
-        currByte = sprintf(currData, "%s: %lu\n", tmp->data, tmp->cpu_time);
+        currByte = sprintf(currData, "%u: %lu, %lu, %lu\n", tmp->pid, tmp->period, tmp->proc_time);
         strcat(buf, currData);
         copied += currByte;
     }
-    mutex_unlock(&my_mutex);
+    //mutex_unlock(&my_mutex);
 
     
     if(*data>0)
@@ -72,14 +77,13 @@ static ssize_t mp2_read(struct file *file, char __user * buffer, size_t count, l
     *data += copied;
 
     return copied;
-	*/
-	return -1;
+	
 }
 
 
 int add_to_list(char *buf)
 {
-/*    task_t *new_task = (list_node_t*)kmalloc(sizeof(list_node_t), GFP_KERNEL);
+/*  task_t *new_task = (list_node_t*)kmalloc(sizeof(list_node_t), GFP_KERNEL);
     insert_node->data = buf;
     insert_node->cpu_time = 0;
     mutex_lock(&my_mutex);
@@ -87,6 +91,36 @@ int add_to_list(char *buf)
     mutex_unlock(&my_mutex);
     return strlen(buf);
 */
+	int i = 0;
+	char *pch;
+	task_node_t *new_task = (task_node_t*)kmalloc(sizeof(task_node_t), GFP_KERNEL);
+    char *dataHolder = (char*)kmalloc(strlen(buf)+1, GFP_KERNEL);
+	if(dataHolder)
+	{
+		strcpy(dataHolder, buf);
+	}
+	
+	pch = strsep(&dataHolder, " ");
+	
+	for(i = 0; i < 3 && pch!=NULL; i ++)
+	{
+		if(i==0)
+		{
+			sscanf(pch, "%u", &(new_task->pid));
+		}
+		else if(i==1)
+		{
+			sscanf(pch, "%lu", &(new_task->period));
+		}
+		else
+		{
+			sscanf(pch, "%lu", &(new_task->proc_time));
+		}
+		pch = strsep(&dataHolder, " ,");
+	}	
+	
+	new_task -> status = 0;
+	list_add_tail(&(new_task->process_node), &taskList);	
 	return -1;
 }
 

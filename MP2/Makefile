@@ -7,7 +7,7 @@ RM:=rm
 
 .PHONY : clean
 
-all: clean modules app 
+all: clean modules app
 
 obj-m:= mp2.o
 
