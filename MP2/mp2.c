@@ -50,7 +50,8 @@ struct task_struct *dispatching_task;
 
 // Called when user application use "cat" or "fopen"
 // The function read the status file and print the information related out
-static ssize_t mp2_read(struct file *file, char __user * buffer, size_t count, loff_t * data){
+static ssize_t mp2_read(struct file *file, char __user * buffer, size_t count, loff_t * data)
+{
     size_t copied = 0;
     char * buf = NULL;
     struct list_head *pos = NULL;
@@ -167,7 +168,7 @@ void init_node(task_node_t* new_task, char* buf)
 	}	
 	
 	new_task -> state = SLEEPING_STATE;
-	new_task -> linux_task = (struct task_struct*)kmalloc(sizeof(struct task_struct), GFP_KERNEL);
+	new_task -> linux_task = find_task_by_pid(new_task->pid);
 
 	curr_timer = &(new_task->wakeup_timer);
 	init_timer(curr_timer);
@@ -176,7 +177,6 @@ void init_node(task_node_t* new_task, char* buf)
     curr_timer->function = _wakeup_timer_handler;
 	add_timer(curr_timer);
 }
-
 
 int add_to_list(char *buf)
 {
@@ -198,11 +198,11 @@ int add_to_list(char *buf)
 	return -1;
 }
 
-void destruct_node(struct list_head *pos) {
+void destruct_node(struct list_head *pos)
+{
 	task_node_t *entry;
 	list_del(pos);
 	entry = list_entry(pos, task_node_t, process_node);
-	kfree(entry->linux_task);
 	kmem_cache_free(task_cache, entry);
 	del_timer(&(entry->wakeup_timer));
 }
@@ -217,7 +217,7 @@ int delete_from_list(char *pid)
 
     list_for_each_safe(pos, next, &taskList){
         curr = list_entry(pos, task_node_t, process_node);
-        memset(curr, 0, 20);
+        memset(curr_pid, 0, 20);
 		sprintf(curr_pid, "%u", curr->pid);
 		if(strcmp(curr_pid, pid)==0)
         {
@@ -229,16 +229,32 @@ int delete_from_list(char *pid)
     return -1;
 }
 
+task_node_t *find_task_node_by_pid(char *pid)
+{
+    struct list_head *pos;
+    struct list_head *next;
+    task_node_t *curr;
+
+    list_for_each_safe(pos, next, &taskList){
+        curr = list_entry(pos, task_node_t, process_node);
+        memset(curr_pid, 0, 20);
+        sprintf(curr_pid, "%u", curr->pid);
+        if(strcmp(curr_pid, pid)==0)
+        {
+            return curr;
+        }
+    }
+    return NULL;
+}
+
 int yield_handler(char *pid)
 {
-	unsigned long nr;
-	struct task_struct *yield_task;
-	kstrtol(pid, 10, &nr);
-	yield_task = find_task_by_pid(nr);
+	task_node_t *yield_task;
+	yield_task = find_task_node_by_pid(pid);
 	yield_task->state = SLEEPING_STATE;
     mod_timer(&(yield_task->wakeup_timer), 
         jiffies + msecs_to_jiffies(yield_task->period - yield_task->proc_time));
-	set_task_state(yield_task, TASK_UNINTERRUPTIBLE);
+	set_task_state(yield_task->linux_task, TASK_UNINTERRUPTIBLE);
 	current_running_task = NULL;
 	wake_up_process(dispatching_task);
 	set_current_state(TASK_INTERRUPTIBLE);
@@ -325,9 +341,6 @@ void __exit mp2_exit(void)
     #ifdef DEBUG
     printk(KERN_ALERT "MP2 MODULE UNLOADING\n");
     #endif
-
-    // delete timer
-    del_timer(&my_timer);
 
     // remove every node on linked list and remove the list     
     list_for_each_safe(pos, next, &taskList){
