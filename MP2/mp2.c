@@ -36,7 +36,6 @@ typedef struct mp2_task_struct {
 
 static struct proc_dir_entry *proc_dir;
 static struct proc_dir_entry *proc_entry;
-static struct timer_list my_timer;
 static struct mutex my_mutex;
 static struct kmem_cache *task_cache;
 
@@ -237,42 +236,10 @@ static ssize_t mp2_write(struct file *file, const char __user *buffer, size_t co
 	return ret;
 }
 
-// Get the scheduled work and work on updating the cpu use time for processes corrsponding to nodes on the linked list
-static void my_worker(struct work_struct * work) {
-//      unsigned long cpu_time;
-/*    struct list_head *pos;
-    list_node_t *tmp = NULL;
-    unsigned int base = 10;
-    int pid;
-    printk(KERN_ALERT "my_woker func called");
-    mutex_lock(&my_mutex);
-    list_for_each(pos, &taskList) {
-        tmp = list_entry(pos, list_node_t, node);
-        kstrtoint(tmp->data, base, &pid);
-        printk(KERN_ALERT "%d", pid);
-     if(get_cpu_use(pid, &cpu_time) == 0) {
-            // update each node
-            tmp->cpu_time = cpu_time;
-        }
-    }
-    mutex_unlock(&my_mutex);
-*/
-}
-
 // Called when timer expired, this will stark the work queue and restart timer ticking
 void _interrupt_handler (unsigned long arg){
     mod_timer(&my_timer, jiffies + msecs_to_jiffies(5000));
     //_update_workqueue_init();
-}
-
-// Set default member variable value for timer, start timer ticking
-static void _create_my_timer(void) {
-    init_timer(&my_timer);
-    my_timer.data = 0;
-    my_timer.expires = jiffies + msecs_to_jiffies(5000);
-    my_timer.function = _interrupt_handler;
-    add_timer(&my_timer);
-    printk(KERN_ALERT "TIMER CREATED");
 }
 
 static const struct file_operations mp2_file = {
@@ -291,9 +258,6 @@ int __init mp2_init(void)
     proc_dir = proc_mkdir(DIRECTORY, NULL);
     proc_entry = proc_create(FILENAME, 0666, proc_dir, & mp2_file);
 	current_running_task = NULL;
-
-    // create Linux Kernel Timer
-    //_create_my_timer();
 
 	// create cache for slab allocator
 	task_cache = kmem_cache_create("task_cache", sizeof(task_node_t), 0, SLAB_HWCACHE_ALIGN, NULL);
