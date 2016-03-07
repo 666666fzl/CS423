@@ -37,7 +37,6 @@ typedef struct mp2_task_struct {
 static struct proc_dir_entry *proc_dir;
 static struct proc_dir_entry *proc_entry;
 static struct timer_list my_timer;
-static struct workqueue_struct * update_workqueue;
 static struct mutex my_mutex;
 static struct kmem_cache *task_cache;
 
@@ -77,23 +76,10 @@ static ssize_t mp2_read(struct file *file, char __user * buffer, size_t count, l
 	
 }
 
-
-int add_to_list(char *buf)
+void init_node(task_node_t* new_task, char* buf) 
 {
-/*  task_t *new_task = (list_node_t*)kmalloc(sizeof(list_node_t), GFP_KERNEL);
-    insert_node->data = buf;
-    insert_node->cpu_time = 0;
-    mutex_lock(&my_mutex);
-    list_add_tail(&(insert_node->node), &taskList);
-    mutex_unlock(&my_mutex);
-    return strlen(buf);
-*/
-	struct list_head *pos;
-    task_node_t *entry;
 	int i = 0;
 	char *pch;
-	//task_node_t *new_task = (task_node_t*)kmalloc(sizeof(task_node_t), GFP_KERNEL);
-	task_node_t *new_task = kmem_cache_alloc(task_cache, GFP_KERNEL);
     char *dataHolder = (char*)kmalloc(strlen(buf)+1, GFP_KERNEL);
 	if(dataHolder)
 	{
@@ -120,6 +106,17 @@ int add_to_list(char *buf)
 	}	
 	
 	new_task -> state = 0;
+	new_task -> linux_task = (struct task_struct*)kmalloc(sizeof(struct task_struct), GFP_KERNEL);
+}
+
+
+int add_to_list(char *buf)
+{
+	struct list_head *pos;
+	task_node_t *entry;
+	task_node_t *new_task = kmem_cache_alloc(task_cache, GFP_KERNEL);
+
+	init_node(new_task, buf);
 
     list_for_each(pos, &taskList) {
         entry = list_entry(pos, task_node_t, process_node);
@@ -131,6 +128,14 @@ int add_to_list(char *buf)
 
 	list_add_tail(&(new_task->process_node), &taskList);	
 	return -1;
+}
+
+void destruct_node(struct list_head *pos) {
+	task_node_t *entry;
+	list_del(pos);
+	entry = list_entry(pos, task_node_t, process_node);
+	kfree(entry->linux_task);
+	kmem_cache_free(task_cache, entry);
 }
 
 int delete_from_list(char *pid)
@@ -147,8 +152,7 @@ int delete_from_list(char *pid)
 		sprintf(curr_pid, "%u", curr->pid);
 		if(strcmp(curr_pid, pid)==0)
         {
-            list_del(pos);
-            kmem_cache_free(task_cache, list_entry(pos, task_node_t, process_node));
+			destruct_node(pos);
         }
     }
 
@@ -255,19 +259,10 @@ static void my_worker(struct work_struct * work) {
 */
 }
 
-// Create a new work and put it into the schedule without delaye
-void _update_workqueue_init(void)
-{
-   struct work_struct *update_time = (struct work_struct *)kmalloc(sizeof(struct work_struct), GFP_ATOMIC);
-
-    INIT_WORK(update_time, my_worker);
-    queue_work(update_workqueue, update_time);
-}
-
 // Called when timer expired, this will stark the work queue and restart timer ticking
 void _interrupt_handler (unsigned long arg){
     mod_timer(&my_timer, jiffies + msecs_to_jiffies(5000));
-    _update_workqueue_init();
+    //_update_workqueue_init();
 }
 
 // Set default member variable value for timer, start timer ticking
@@ -296,8 +291,6 @@ int __init mp2_init(void)
     proc_dir = proc_mkdir(DIRECTORY, NULL);
     proc_entry = proc_create(FILENAME, 0666, proc_dir, & mp2_file);
 	current_running_task = NULL;
-    // create work queue
-    //update_workqueue = create_workqueue("update_workqueue");
 
     // create Linux Kernel Timer
     //_create_my_timer();
@@ -324,10 +317,6 @@ void __exit mp2_exit(void)
 
     // delete timer
     del_timer(&my_timer);
-
-    // clean and remove work queue
-    flush_workqueue(update_workqueue);
-    destroy_workqueue(update_workqueue);
 
     // remove every node on linked list and remove the list     
     list_for_each_safe(pos, next, &taskList){
