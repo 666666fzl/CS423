@@ -59,7 +59,8 @@ static ssize_t mp2_read(struct file *file, char __user * buffer, size_t count, l
     char currData[MAX_BUF_SIZE];
     int currByte;
     buf = (char*) kmalloc(1024, GFP_KERNEL);
-    //mutex_lock(&my_mutex);
+    
+	mutex_lock(&my_mutex);
     list_for_each(pos, &taskList) {
         tmp = list_entry(pos, task_node_t, process_node);
         memset(currData, 0, MAX_BUF_SIZE);
@@ -67,7 +68,7 @@ static ssize_t mp2_read(struct file *file, char __user * buffer, size_t count, l
         strcat(buf, currData);
         copied += currByte;
     }
-    //mutex_unlock(&my_mutex);
+    mutex_unlock(&my_mutex);
     
     if(*data>0)
     {
@@ -81,6 +82,8 @@ static ssize_t mp2_read(struct file *file, char __user * buffer, size_t count, l
 	
 }
 
+// Called when one of the tasks is waked up
+// The function checks if a context switch is needed and do the context switch
 int dispatching_thread(void *data)
 {
 	while(1)
@@ -126,16 +129,19 @@ int dispatching_thread(void *data)
 	return 0;
 }
 
+// Called when one of the task's timer is expired
+// Set the task to ready state and call the dispatching thread
 void _wakeup_timer_handler(unsigned long arg) 
 {
 	task_node_t *curr_node = (task_node_t *)arg;
 	if (curr_node != current_running_task) { 
 		curr_node -> state = READY_STATE;
-		//dispatching_thread(NULL);
 		wake_up_process(dispatching_task);
 	}
 }
 
+// Called when a new self-defined task node is allocated
+// Store user input, set task state and create timer for it
 void init_node(task_node_t* new_task, char* buf) 
 {
 	int i = 0;
@@ -150,6 +156,7 @@ void init_node(task_node_t* new_task, char* buf)
 	
 	pch = strsep(&dataHolder, " ");
 	
+	// parse user input and store it into the node
 	for(i = 0; i < 3 && pch!=NULL; i ++)
 	{
 		if(i==0)
@@ -170,6 +177,7 @@ void init_node(task_node_t* new_task, char* buf)
 	new_task -> state = SLEEPING_STATE;
 	new_task -> linux_task = find_task_by_pid(new_task->pid);
 
+	// create task wakeup timer
 	curr_timer = &(new_task->wakeup_timer);
 	init_timer(curr_timer);
 	curr_timer->data = (unsigned long)new_task;
@@ -178,6 +186,8 @@ void init_node(task_node_t* new_task, char* buf)
 	add_timer(curr_timer);
 }
 
+// Add a newly created task node into the existing task linked list
+// Ordered bt task period (shortest period first)
 int add_to_list(char *buf)
 {
 	struct list_head *pos;
@@ -198,6 +208,7 @@ int add_to_list(char *buf)
 	return -1;
 }
 
+// Free a allocated task node
 void destruct_node(struct list_head *pos)
 {
 	task_node_t *entry;
@@ -207,6 +218,7 @@ void destruct_node(struct list_head *pos)
 	del_timer(&(entry->wakeup_timer));
 }
 
+// Traverse the entire task linked list and find a task according to its pid
 struct list_head *find_task_node_by_pid(char *pid)
 {
     struct list_head *pos;
@@ -231,6 +243,8 @@ struct list_head *find_task_node_by_pid(char *pid)
     return NULL;
 }
 
+// Called when user input "Y" as command
+// Put yield task into sleeping state and start its wakeup timer
 int yield_handler(char *pid)
 {
 	task_node_t *yield_task;
@@ -251,9 +265,9 @@ int yield_handler(char *pid)
 	return 0;	
 }
 
-int admission_control(struct file *file, const char __user *buffer, size_t count, loff_t * data)
+bool admission_control(void)
 {
-    return -1;
+    return false;
 }
 
 // Called when user application registered a process
