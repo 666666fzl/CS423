@@ -207,33 +207,14 @@ void destruct_node(struct list_head *pos)
 	del_timer(&(entry->wakeup_timer));
 }
 
-int delete_from_list(char *pid)
+struct list_head *find_task_node_by_pid(char *pid)
 {
     struct list_head *pos;
     struct list_head *next;
     task_node_t *curr;
-	char curr_pid[20];
+    char curr_pid[20];
+
     mutex_lock(&my_mutex);
-
-    list_for_each_safe(pos, next, &taskList){
-        curr = list_entry(pos, task_node_t, process_node);
-        memset(curr_pid, 0, 20);
-		sprintf(curr_pid, "%u", curr->pid);
-		if(strcmp(curr_pid, pid)==0)
-        {
-			destruct_node(pos);
-        }
-    }
-
-    mutex_unlock(&my_mutex);
-    return -1;
-}
-
-task_node_t *find_task_node_by_pid(char *pid)
-{
-    struct list_head *pos;
-    struct list_head *next;
-    task_node_t *curr;
 
     list_for_each_safe(pos, next, &taskList){
         curr = list_entry(pos, task_node_t, process_node);
@@ -241,16 +222,23 @@ task_node_t *find_task_node_by_pid(char *pid)
         sprintf(curr_pid, "%u", curr->pid);
         if(strcmp(curr_pid, pid)==0)
         {
-            return curr;
+            mutex_unlock(&my_mutex);
+            return pos;
         }
     }
+
+    mutex_unlock(&my_mutex);
     return NULL;
 }
 
 int yield_handler(char *pid)
 {
 	task_node_t *yield_task;
-	yield_task = find_task_node_by_pid(pid);
+    struct list_head *yeild_pos;
+
+	yield_pos = find_task_node_by_pid(pid);
+    yield_task = list_entry(pos, task_node_t, process_node);
+
 	yield_task->state = SLEEPING_STATE;
     mod_timer(&(yield_task->wakeup_timer), 
         jiffies + msecs_to_jiffies(yield_task->period - yield_task->proc_time));
@@ -259,6 +247,7 @@ int yield_handler(char *pid)
 	wake_up_process(dispatching_task);
 	set_current_state(TASK_INTERRUPTIBLE);
 	schedule();	
+
 	return 0;	
 }
 
@@ -272,6 +261,10 @@ int admission_control(struct file *file, const char __user *buffer, size_t count
 static ssize_t mp2_write(struct file *file, const char __user *buffer, size_t count, loff_t * data){
 	char * buf = (char*)kmalloc(count+1, GFP_KERNEL);
 	int ret = -1;
+    struct list_head *pos;
+    {
+        /* data */
+    };
 
 	if (count > MAX_BUF_SIZE - 1) {
 		count = MAX_BUF_SIZE - 1;
@@ -293,7 +286,9 @@ static ssize_t mp2_write(struct file *file, const char __user *buffer, size_t co
 	}
 	else if (buf[0] == 'D') {
 	// 3.unregister: D,PID
-		ret = delete_from_list(buf+2);
+        pos = find_task_node_by_pid(buf+2);
+        destruct_node(pos);
+        ret = -1
 		printk(KERN_ALERT "UNREGISTERED PID: %s", buf+2);
 	}
 	else {
