@@ -1,5 +1,6 @@
 #define LINUX
 
+#include "mp2_given.h"
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/timer.h>
@@ -11,6 +12,7 @@
 #include <linux/mutex.h>
 #include <linux/sched.h>
 #include <linux/string.h>
+#include <linux/kthread.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("23");
@@ -20,6 +22,9 @@ MODULE_DESCRIPTION("CS-423 MP2");
 #define FILENAME "status"
 #define DIRECTORY "mp2"
 #define MAX_BUF_SIZE 128
+#define SLEEPING_STATE 0
+#define READY_STATE 1
+#define RUNNING_STATE 2
 
 typedef struct mp2_task_struct {
 	struct task_struct* linux_task;
@@ -42,7 +47,7 @@ static struct kmem_cache *task_cache;
 
 LIST_HEAD(taskList);
 task_node_t *current_running_task;
-
+struct task_struct *dispatching_task;
 // Called when user application use "cat" or "fopen"
 // The function read the status file and print the information related out
 static ssize_t mp2_read(struct file *file, char __user * buffer, size_t count, loff_t * data){
@@ -76,11 +81,67 @@ static ssize_t mp2_read(struct file *file, char __user * buffer, size_t count, l
 	
 }
 
+int dispatching_thread(void *data)
+{
+	while(1)
+	{
+		task_node_t *entry;
+		task_node_t *prev_task;
+		struct sched_param new_sparam; 
+		struct sched_param old_sparam; 
+		struct list_head *pos;
+		task_node_t *next_task=NULL;
+		if(current_running_task)
+		{
+			list_for_each(pos, &taskList) {
+				entry = list_entry(pos, task_node_t, process_node);
+				if (entry->period < current_running_task->period && entry->state == READY_STATE) {
+					next_task = entry;
+					break;
+				}
+			}
+		}
+		
+		prev_task = current_running_task;
+		prev_task->state = READY_STATE;
+		
+		//old task
+		old_sparam.sched_priority=0; 
+		sched_setscheduler(prev_task->linux_task, SCHED_NORMAL, &old_sparam);
+		
+		if(next_task)
+		{	
+			// new task
+			wake_up_process(next_task->linux_task); 
+			new_sparam.sched_priority=99;
+			sched_setscheduler(next_task->linux_task, SCHED_FIFO, &new_sparam);
+
+			current_running_task = next_task;
+			current_running_task->state = RUNNING_STATE;
+		}
+			
+		set_current_state(TASK_INTERRUPTIBLE);
+		schedule();
+	}
+	return 0;
+}
+void _wakeup_timer_handler(unsigned long arg) 
+{
+	task_node_t *curr_node = (task_node_t *)arg;
+	if (curr_node != current_running_task) { 
+		curr_node -> state = READY_STATE;
+		//dispatching_thread(NULL);
+		wake_up_process(dispatching_task);
+	}
+}
+
 void init_node(task_node_t* new_task, char* buf) 
 {
 	int i = 0;
 	char *pch;
     char *dataHolder = (char*)kmalloc(strlen(buf)+1, GFP_KERNEL);
+	struct timer_list *curr_timer;
+	
 	if(dataHolder)
 	{
 		strcpy(dataHolder, buf);
@@ -105,8 +166,15 @@ void init_node(task_node_t* new_task, char* buf)
 		pch = strsep(&dataHolder, " ,");
 	}	
 	
-	new_task -> state = 0;
+	new_task -> state = SLEEPING_STATE;
 	new_task -> linux_task = (struct task_struct*)kmalloc(sizeof(struct task_struct), GFP_KERNEL);
+
+	curr_timer = &(new_task->wakeup_timer);
+	init_timer(curr_timer);
+	curr_timer->data = (unsigned long)new_task;
+	curr_timer->expires = jiffies + msecs_to_jiffies(5000); // ???????
+    curr_timer->function = _wakeup_timer_handler;
+	add_timer(curr_timer);
 }
 
 
@@ -136,6 +204,7 @@ void destruct_node(struct list_head *pos) {
 	entry = list_entry(pos, task_node_t, process_node);
 	kfree(entry->linux_task);
 	kmem_cache_free(task_cache, entry);
+	del_timer(&(entry->wakeup_timer));
 }
 
 int delete_from_list(char *pid)
@@ -160,39 +229,19 @@ int delete_from_list(char *pid)
     return -1;
 }
 
-void dispatching_thread(void)
+int yield_handler(char *pid)
 {
-	task_node_t *next_task;
-	task_node_t *entry;
-	task_node_t *prev_task;
-	struct sched_param new_sparam; 
-	struct sched_param old_sparam; 
-	struct list_head *pos;
-	if(current_running_task)
-	{
-		list_for_each(pos, &taskList) {
-			entry = list_entry(pos, task_node_t, process_node);
-			if (entry->period < current_running_task->period && entry->state==1) {
-				next_task = entry;
-				break;
-			}
-		}
-	}
-	
-	prev_task = current_running_task;
-	prev_task->state = 1;
-	
-	//old task
-	old_sparam.sched_priority=0; 
-	sched_setscheduler(prev_task->linux_task, SCHED_NORMAL, &old_sparam);
-	
-	// new task
-	wake_up_process(next_task->linux_task); 
-	new_sparam.sched_priority=99;
-	sched_setscheduler(next_task->linux_task, SCHED_FIFO, &new_sparam);
-
-	current_running_task = next_task;
-	current_running_task->state=2;
+	unsigned long nr;
+	struct task_struct *yield_task;
+	kstrtol(pid, 10, &nr);
+	yield_task = find_task_by_pid(nr);
+	yield_task->state = SLEEPING_STATE;
+	set_task_state(yield_task, TASK_UNINTERRUPTIBLE);
+	current_running_task = NULL;
+	wake_up_process(dispatching_task);
+	set_current_state(TASK_INTERRUPTIBLE);
+	schedule();	
+	return 0;	
 }
 
 int admission_control(struct file *file, const char __user *buffer, size_t count, loff_t * data)
@@ -291,7 +340,8 @@ int __init mp2_init(void)
     proc_dir = proc_mkdir(DIRECTORY, NULL);
     proc_entry = proc_create(FILENAME, 0666, proc_dir, & mp2_file);
 	current_running_task = NULL;
-
+	
+	dispatching_task = kthread_run(dispatching_thread, NULL, "mp2");
     // create Linux Kernel Timer
     //_create_my_timer();
 
@@ -320,8 +370,7 @@ void __exit mp2_exit(void)
 
     // remove every node on linked list and remove the list     
     list_for_each_safe(pos, next, &taskList){
-        list_del(pos);
-    	kmem_cache_free(task_cache, list_entry(pos, task_node_t, process_node));
+		destruct_node(pos);
 	}
 
     // remove file entry and repository  
