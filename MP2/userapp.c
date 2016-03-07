@@ -32,6 +32,18 @@ int unreg(char* write_path, pid_t pid)
     return byte_write;
 }
 
+int yield(char* write_path, pid_t pid)
+{
+	FILE * fp = fopen(write_path, "a+");
+	if(!fp) {
+		perror("file doesn't exist\n");
+		return -1;
+	}
+	int byte_write = fprintf(fp, "Y:%d", pid);
+	fclose(fp);
+	return byte_write;
+}
+
 int main(int argc, char* argv[])
 {
     if(argc < 4)
@@ -52,7 +64,8 @@ int main(int argc, char* argv[])
         unreg (write_path, pid);
     }
     else{
-
+		pid_t pid = atoi(argv[3]);
+		yield (write_path, pid);
     }
     while(1);
     return 0;
