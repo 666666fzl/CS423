@@ -47,6 +47,7 @@ static struct kmem_cache *task_cache;
 LIST_HEAD(taskList);
 task_node_t *current_running_task;
 struct task_struct *dispatching_task;
+
 // Called when user application use "cat" or "fopen"
 // The function read the status file and print the information related out
 static ssize_t mp2_read(struct file *file, char __user * buffer, size_t count, loff_t * data){
@@ -66,7 +67,6 @@ static ssize_t mp2_read(struct file *file, char __user * buffer, size_t count, l
         copied += currByte;
     }
     //mutex_unlock(&my_mutex);
-
     
     if(*data>0)
     {
@@ -124,6 +124,7 @@ int dispatching_thread(void *data)
 	}
 	return 0;
 }
+
 void _wakeup_timer_handler(unsigned long arg) 
 {
 	task_node_t *curr_node = (task_node_t *)arg;
@@ -171,7 +172,7 @@ void init_node(task_node_t* new_task, char* buf)
 	curr_timer = &(new_task->wakeup_timer);
 	init_timer(curr_timer);
 	curr_timer->data = (unsigned long)new_task;
-	curr_timer->expires = jiffies + msecs_to_jiffies(5000); // ???????
+	curr_timer->expires = jiffies + msecs_to_jiffies(new_task->period - new_task->proc_time);
     curr_timer->function = _wakeup_timer_handler;
 	add_timer(curr_timer);
 }
@@ -235,6 +236,8 @@ int yield_handler(char *pid)
 	kstrtol(pid, 10, &nr);
 	yield_task = find_task_by_pid(nr);
 	yield_task->state = SLEEPING_STATE;
+    mod_timer(&(yield_task->wakeup_timer), 
+        jiffies + msecs_to_jiffies(yield_task->period - yield_task->proc_time));
 	set_task_state(yield_task, TASK_UNINTERRUPTIBLE);
 	current_running_task = NULL;
 	wake_up_process(dispatching_task);
@@ -253,7 +256,6 @@ int admission_control(struct file *file, const char __user *buffer, size_t count
 static ssize_t mp2_write(struct file *file, const char __user *buffer, size_t count, loff_t * data){
 	char * buf = (char*)kmalloc(count+1, GFP_KERNEL);
 	int ret = -1;
-
 
 	if (count > MAX_BUF_SIZE - 1) {
 		count = MAX_BUF_SIZE - 1;
@@ -283,12 +285,6 @@ static ssize_t mp2_write(struct file *file, const char __user *buffer, size_t co
 	}
 
 	return ret;
-}
-
-// Called when timer expired, this will stark the work queue and restart timer ticking
-void _interrupt_handler (unsigned long arg){
-    mod_timer(&my_timer, jiffies + msecs_to_jiffies(5000));
-    //_update_workqueue_init();
 }
 
 static const struct file_operations mp2_file = {
