@@ -234,10 +234,10 @@ struct list_head *find_task_node_by_pid(char *pid)
 int yield_handler(char *pid)
 {
 	task_node_t *yield_task;
-    struct list_head *yeild_pos;
+    struct list_head *yield_pos;
 
 	yield_pos = find_task_node_by_pid(pid);
-    yield_task = list_entry(pos, task_node_t, process_node);
+    yield_task = list_entry(yield_pos, task_node_t, process_node);
 
 	yield_task->state = SLEEPING_STATE;
     mod_timer(&(yield_task->wakeup_timer), 
@@ -288,7 +288,7 @@ static ssize_t mp2_write(struct file *file, const char __user *buffer, size_t co
 	// 3.unregister: D,PID
         pos = find_task_node_by_pid(buf+2);
         destruct_node(pos);
-        ret = -1
+        ret = -1;
 		printk(KERN_ALERT "UNREGISTERED PID: %s", buf+2);
 	}
 	else {
