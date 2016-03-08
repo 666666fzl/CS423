@@ -125,26 +125,16 @@ void pick_task_to_run(void)
 	}
 	else
 	{
-		list_for_each(pos, &taskList) {
-			entry = list_entry(pos, task_node_t, process_node);
-			if(!next_task)
-			{
-				entry = next_task;
-			}
-			else
-			{
-				if(entry->period < next_task->period)
-				{
-					next_task = entry;
-				}
-			}
-		}		
-			new_sparam.sched_priority=MAX_USER_RT_PRIO-1;
-			sched_setscheduler(next_task->linux_task, SCHED_FIFO, &new_sparam);
-			do_gettimeofday(next_task->start_time);
-			current_running_task = next_task;
-			current_running_task->state = RUNNING_STATE;
-	}
+        if(!list_empty(&taskList)) {
+            next_task = list_first_entry(&taskList, task_node_t, process_node);
+            new_sparam.sched_priority=MAX_USER_RT_PRIO-1;
+            sched_setscheduler(next_task->linux_task, SCHED_FIFO, &new_sparam);
+            do_gettimeofday(next_task->start_time);
+            wake_up_process(next_task->linux_task);
+            current_running_task = next_task;
+            current_running_task->state = RUNNING_STATE;
+        }
+    }
 }
 
 // Called when one of the tasks is waked up
