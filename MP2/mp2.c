@@ -91,6 +91,7 @@ void pick_task_to_run(void)
 	struct sched_param old_sparam; 
 	struct list_head *pos;
 	task_node_t *next_task=NULL;
+	printk(KERN_ALERT "start to searching for next running task");
 	if(current_running_task)
 	{
 		list_for_each(pos, &taskList) {
@@ -100,28 +101,49 @@ void pick_task_to_run(void)
 				break;
 			}
 		}
+		prev_task = current_running_task;
+		if(prev_task->state == RUNNING_STATE)
+		{
+			prev_task->state = READY_STATE;
+		}
+		
+		//old task
+		old_sparam.sched_priority=0; 
+		sched_setscheduler(prev_task->linux_task, SCHED_NORMAL, &old_sparam);
+		
+		if(next_task)
+		{	
+			// new task
+			printk(KERN_ALERT "PROCESS %ld START TO RUN", next_task->pid);
+			wake_up_process(next_task->linux_task); 
+			new_sparam.sched_priority=MAX_USER_RT_PRIO-1;
+			sched_setscheduler(next_task->linux_task, SCHED_FIFO, &new_sparam);
+			do_gettimeofday(next_task->start_time);
+			current_running_task = next_task;
+			current_running_task->state = RUNNING_STATE;
+		}
 	}
-	
-	prev_task = current_running_task;
-	if(prev_task->state == RUNNING_STATE)
+	else
 	{
-		prev_task->state = READY_STATE;
-	}
-	
-	//old task
-	old_sparam.sched_priority=0; 
-	sched_setscheduler(prev_task->linux_task, SCHED_NORMAL, &old_sparam);
-	
-	if(next_task)
-	{	
-		// new task
-		printk(KERN_ALERT "PROCESS %ld START TO RUN", next_task->pid);
-		wake_up_process(next_task->linux_task); 
-		new_sparam.sched_priority=MAX_USER_RT_PRIO-1;
-		sched_setscheduler(next_task->linux_task, SCHED_FIFO, &new_sparam);
-		do_gettimeofday(next_task->start_time);
-		current_running_task = next_task;
-		current_running_task->state = RUNNING_STATE;
+		list_for_each(pos, &taskList) {
+			entry = list_entry(pos, task_node_t, process_node);
+			if(!next_task)
+			{
+				entry = next_task;
+			}
+			else
+			{
+				if(entry->period < next_task->period)
+				{
+					next_task = entry;
+				}
+			}
+		}		
+			new_sparam.sched_priority=MAX_USER_RT_PRIO-1;
+			sched_setscheduler(next_task->linux_task, SCHED_FIFO, &new_sparam);
+			do_gettimeofday(next_task->start_time);
+			current_running_task = next_task;
+			current_running_task->state = RUNNING_STATE;
 	}
 }
 
@@ -131,6 +153,10 @@ int dispatching_thread(void *data)
 {
 	while(1)
 	{
+		if(kthread_should_stop())
+		{
+			printk(KERN_ALERT "kthread should not be running");
+		}
 		printk(KERN_ALERT "dispatching thread fired");
 		pick_task_to_run();	
 		set_current_state(TASK_INTERRUPTIBLE);
@@ -143,6 +169,7 @@ int dispatching_thread(void *data)
 // Set the task to ready state and call the dispatching thread
 void _wakeup_timer_handler(unsigned long arg) 
 {
+	printk(KERN_ALERT "wake up timer handler gets fired");
 	task_node_t *curr_node = (task_node_t *)arg;
 	if (curr_node != current_running_task) { 
 		curr_node -> state = READY_STATE;
