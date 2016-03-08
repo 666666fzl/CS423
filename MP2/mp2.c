@@ -114,7 +114,7 @@ void pick_task_to_run(void)
 		if(next_task)
 		{	
 			// new task
-			printk(KERN_ALERT "PROCESS %ld START TO RUN", next_task->pid);
+			printk(KERN_ALERT "PROCESS %u START TO RUN", next_task->pid);
 			wake_up_process(next_task->linux_task); 
 			new_sparam.sched_priority=MAX_USER_RT_PRIO-1;
 			sched_setscheduler(next_task->linux_task, SCHED_FIFO, &new_sparam);
@@ -159,8 +159,9 @@ int dispatching_thread(void *data)
 // Set the task to ready state and call the dispatching thread
 void _wakeup_timer_handler(unsigned long arg) 
 {
+	task_node_t *curr_node;
 	printk(KERN_ALERT "wake up timer handler gets fired");
-	task_node_t *curr_node = (task_node_t *)arg;
+	curr_node = (task_node_t *)arg;
 	if (curr_node != current_running_task) { 
 		curr_node -> state = READY_STATE;
 		wake_up_process(dispatching_task);
