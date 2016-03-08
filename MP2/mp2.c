@@ -37,6 +37,7 @@ typedef struct mp2_task_struct {
 	unsigned long proc_time;
 	unsigned long period;
 	struct list_head process_node;
+	struct timeval *start_time;
 } task_node_t;
 
 static struct proc_dir_entry *proc_dir;
@@ -82,47 +83,56 @@ static ssize_t mp2_read(struct file *file, char __user * buffer, size_t count, l
 	
 }
 
+void pick_task_to_run(void)
+{
+	task_node_t *entry;
+	task_node_t *prev_task;
+	struct sched_param new_sparam; 
+	struct sched_param old_sparam; 
+	struct list_head *pos;
+	task_node_t *next_task=NULL;
+	if(current_running_task)
+	{
+		list_for_each(pos, &taskList) {
+			entry = list_entry(pos, task_node_t, process_node);
+			if (entry->period < current_running_task->period && entry->state == READY_STATE) {
+				next_task = entry;
+				break;
+			}
+		}
+	}
+	
+	prev_task = current_running_task;
+	if(prev_task->state == RUNNING_STATE)
+	{
+		prev_task->state = READY_STATE;
+	}
+	
+	//old task
+	old_sparam.sched_priority=0; 
+	sched_setscheduler(prev_task->linux_task, SCHED_NORMAL, &old_sparam);
+	
+	if(next_task)
+	{	
+		// new task
+		printk(KERN_ALERT "PROCESS %ld START TO RUN", next_task->pid);
+		wake_up_process(next_task->linux_task); 
+		new_sparam.sched_priority=MAX_USER_RT_PRIO-1;
+		sched_setscheduler(next_task->linux_task, SCHED_FIFO, &new_sparam);
+		do_gettimeofday(next_task->start_time);
+		current_running_task = next_task;
+		current_running_task->state = RUNNING_STATE;
+	}
+}
+
 // Called when one of the tasks is waked up
 // The function checks if a context switch is needed and do the context switch
 int dispatching_thread(void *data)
 {
 	while(1)
 	{
-		task_node_t *entry;
-		task_node_t *prev_task;
-		struct sched_param new_sparam; 
-		struct sched_param old_sparam; 
-		struct list_head *pos;
-		task_node_t *next_task=NULL;
-		if(current_running_task)
-		{
-			list_for_each(pos, &taskList) {
-				entry = list_entry(pos, task_node_t, process_node);
-				if (entry->period < current_running_task->period && entry->state == READY_STATE) {
-					next_task = entry;
-					break;
-				}
-			}
-		}
-		
-		prev_task = current_running_task;
-		prev_task->state = READY_STATE;
-		
-		//old task
-		old_sparam.sched_priority=0; 
-		sched_setscheduler(prev_task->linux_task, SCHED_NORMAL, &old_sparam);
-		
-		if(next_task)
-		{	
-			// new task
-			wake_up_process(next_task->linux_task); 
-			new_sparam.sched_priority=99;
-			sched_setscheduler(next_task->linux_task, SCHED_FIFO, &new_sparam);
-
-			current_running_task = next_task;
-			current_running_task->state = RUNNING_STATE;
-		}
-			
+		printk(KERN_ALERT "dispatching thread fired");
+		pick_task_to_run();	
 		set_current_state(TASK_INTERRUPTIBLE);
 		schedule();
 	}
@@ -176,12 +186,13 @@ void init_node(task_node_t* new_task, char* buf)
 	
 	new_task -> state = SLEEPING_STATE;
 	new_task -> linux_task = find_task_by_pid(new_task->pid);
-
+	new_task -> start_time = (struct timeval*)kmalloc(sizeof(struct timeval), GFP_KERNEL);
+	do_gettimeofday(new_task->start_time);
 	// create task wakeup timer
 	curr_timer = &(new_task->wakeup_timer);
 	init_timer(curr_timer);
 	curr_timer->data = (unsigned long)new_task;
-	curr_timer->expires = jiffies + msecs_to_jiffies(new_task->period - new_task->proc_time);
+	//curr_timer->expires = jiffies + msecs_to_jiffies(new_task->period - new_task->proc_time);
     curr_timer->function = _wakeup_timer_handler;
 	add_timer(curr_timer);
 }
@@ -254,8 +265,9 @@ int yield_handler(char *pid)
     yield_task = list_entry(yield_pos, task_node_t, process_node);
 
 	yield_task->state = SLEEPING_STATE;
+
     mod_timer(&(yield_task->wakeup_timer), 
-        jiffies + msecs_to_jiffies(yield_task->period - yield_task->proc_time));
+        jiffies + msecs_to_jiffies(yield_task->period - ( yield_task->start_time->tv_sec*1000000+yield_task->start_time->tv_usec )));
 	set_task_state(yield_task->linux_task, TASK_UNINTERRUPTIBLE);
 	current_running_task = NULL;
 	wake_up_process(dispatching_task);
@@ -297,6 +309,8 @@ static ssize_t mp2_write(struct file *file, const char __user *buffer, size_t co
 	}
 	else if (buf[0] == 'Y') {
 	// 2.yield: Y,PID
+		printk(KERN_ALERT "YIELD PID:%s", buf+2);
+		yield_handler(buf+2);
 	}
 	else if (buf[0] == 'D') {
 	// 3.unregister: D,PID

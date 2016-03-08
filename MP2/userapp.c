@@ -1,6 +1,6 @@
 #include "userapp.h"
 #include <stdlib.h>
-
+#include <time.h>
 #define PERIOD 3000
 #define PROC_TIME 1000
 #define PROC_FILE "/proc/mp2/status"
@@ -52,6 +52,16 @@ int read_status(void)
 
 }
 
+void do_job(void)
+{
+	time_t rawtime;
+	struct tm * timeinfo;
+
+    time ( &rawtime );
+    timeinfo = localtime ( &rawtime );
+    printf ( "Current local time and date: %s", asctime (timeinfo) );
+}
+
 int main(int argc, char* argv[])
 {
     /*if(argc < 4)
@@ -79,14 +89,16 @@ int main(int argc, char* argv[])
     return 0;*/
     pid_t pid = getpid();
     reg(pid, PERIOD, PROC_TIME); //Proc filesystem
-    list = read_status(); //Proc filesystem: Verify the process was admitted 
-    if (!process in the list) exit 1;
+//    list = read_status(); //Proc filesystem: Verify the process was admitted 
+  //  if (!process in the list) exit 1;
     //setup everything needed for real-time loop: t0=gettimeofday() 
     yield(pid); //Proc filesystem
     //this is the real-time loop
-    while(exist jobs)
+    while(/*exist jobs*/1)
     {
-    do_job(); //wakeup_time=gettimeofday()-t0 and factorial computation
-    YIELD(PID); //Proc filesystem. JobProcessTime=gettimeofday()-wakeup_time }
-    UNREGISTER(PID); //Proc filesystem }
+		do_job(); //wakeup_time=gettimeofday()-t0 and factorial computation
+		yield(pid); //Proc filesystem. JobProcessTime=gettimeofday()-wakeup_time }
+		//UNREGISTER(pid); //Proc filesystem }
+	}
 }
+

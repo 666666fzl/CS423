@@ -7,6 +7,6 @@
 #include <stdio.h>
 #include <fcntl.h>
 
-int reg(char* write_path, char * period);
+//int reg(char* write_path, char * period);
 
 #endif
