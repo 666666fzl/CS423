@@ -128,12 +128,10 @@ void pick_task_to_run(void)
 	}
 	else
 	{
-		printk(KERN_ALERT "cur_run_task = NULL\n");
 		if(list_empty(&taskList))
 		{
 			return;
 		}
-		printk(KERN_ALERT "list is not empty\n");
 		list_for_each(pos, &taskList) {
 			entry = list_entry(pos, task_node_t, process_node);
 			if (entry->state == READY_STATE) {
@@ -143,7 +141,6 @@ void pick_task_to_run(void)
 		}
 		if(next_task && next_task->state==READY_STATE)
 		{
-			printk(KERN_ALERT "next_task is not empty");
 			new_sparam.sched_priority=MAX_USER_RT_PRIO-1;
 			sched_setscheduler(next_task->linux_task, SCHED_FIFO, &new_sparam);
 			do_gettimeofday(next_task->start_time);
@@ -163,6 +160,7 @@ int dispatching_thread(void *data)
 		if(kthread_should_stop())
 		{
 			printk(KERN_ALERT "KTHREAD FINISH ITS JOB AND SHOULD STOP");
+			return 0;
 		}
 		printk(KERN_ALERT "DISPATCHING THREAD STARTS WORKING");
 		mutex_lock(&my_mutex);	
@@ -434,7 +432,8 @@ int __init mp2_init(void)
     proc_entry = proc_create(FILENAME, 0666, proc_dir, & mp2_file);
 	current_running_task = NULL;
 
-	dispatching_task = kthread_run(dispatching_thread, NULL, "mp2");
+	// init kthread, binding dispatching thread function
+	dispatching_task = kthread_create(dispatching_thread, NULL, "mp2");
 
 	// create cache for slab allocator
 	task_cache = kmem_cache_create("task_cache", sizeof(task_node_t), 0, SLAB_HWCACHE_ALIGN, NULL);
@@ -465,8 +464,11 @@ void __exit mp2_exit(void)
     remove_proc_entry(FILENAME, proc_dir);
     remove_proc_entry(DIRECTORY, NULL);
 
-	// destroy mutex
+	// stop dipatching thread
+	kthread_stop(dispatching_task);
 
+	// destroy memory cache
+	kmem_cache_destroy(task_cache);
 
     printk(KERN_ALERT "MP2 MODULE UNLOADED\n");
 }
