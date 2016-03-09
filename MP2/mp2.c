@@ -168,51 +168,57 @@ void _wakeup_timer_handler(unsigned long arg)
 	}
 }
 
+void read_process_info(char *info, pid_t *pid, unsigned long *period, unsigned long *proc_time)
+{
+    int i = 0;
+    char *pch;
+    char *dataHolder = (char*)kmalloc(strlen(info)+1, GFP_KERNEL);
+    
+    if(dataHolder)
+    {   
+        strcpy(dataHolder, info);
+    }   
+    
+    pch = strsep(&dataHolder, " ");
+    
+    // parse user input and store it into the node
+    for(i = 0; i < 3 && pch!=NULL; i ++) 
+    {   
+        if(i==0)
+        {   
+            sscanf(pch, "%u", pid);
+        }   
+        else if(i==1)
+        {   
+            sscanf(pch, "%lu", period);
+        }   
+        else
+        {   
+            sscanf(pch, "%lu", proc_time);
+        }   
+        pch = strsep(&dataHolder, " ,");
+    }   
+}
+    
+
 // Called when a new self-defined task node is allocated
 // Store user input, set task state and create timer for it
 void init_node(task_node_t* new_task, char* buf) 
 {
-	int i = 0;
-	char *pch;
-    char *dataHolder = (char*)kmalloc(strlen(buf)+1, GFP_KERNEL);
-	struct timer_list *curr_timer;
-	
-	if(dataHolder)
-	{
-		strcpy(dataHolder, buf);
-	}
-	
-	pch = strsep(&dataHolder, " ");
-	
-	// parse user input and store it into the node
-	for(i = 0; i < 3 && pch!=NULL; i ++)
-	{
-		if(i==0)
-		{
-			sscanf(pch, "%u", &(new_task->pid));
-		}
-		else if(i==1)
-		{
-			sscanf(pch, "%lu", &(new_task->period));
-		}
-		else
-		{
-			sscanf(pch, "%lu", &(new_task->proc_time));
-		}
-		pch = strsep(&dataHolder, " ,");
-	}	
-	
-	new_task -> state = SLEEPING_STATE;
-	new_task -> linux_task = find_task_by_pid(new_task->pid);
-	new_task -> start_time = (struct timeval*)kmalloc(sizeof(struct timeval), GFP_KERNEL);
-	do_gettimeofday(new_task->start_time);
-	// create task wakeup timer
-	curr_timer = &(new_task->wakeup_timer);
-	init_timer(curr_timer);
-	curr_timer->data = (unsigned long)new_task;
-	//curr_timer->expires = jiffies + msecs_to_jiffies(new_task->period - new_task->proc_time);
+
+    struct timer_list *curr_timer;
+    read_process_info(buf, &(new_task->pid), &(new_task->period), &(new_task->proc_time));
+    new_task -> state = SLEEPING_STATE;
+    new_task -> linux_task = find_task_by_pid(new_task->pid);
+    new_task -> start_time = (struct timeval*)kmalloc(sizeof(struct timeval), GFP_KERNEL);
+    do_gettimeofday(new_task->start_time);
+    // create task wakeup timer
+    curr_timer = &(new_task->wakeup_timer);
+    init_timer(curr_timer);
+    curr_timer->data = (unsigned long)new_task;
+    //curr_timer->expires = jiffies + msecs_to_jiffies(new_task->period - new_task->proc_time);
     curr_timer->function = _wakeup_timer_handler;
-	add_timer(curr_timer);
+    add_timer(curr_timer);
 }
 
 // Add a newly created task node into the existing task linked list
@@ -295,9 +301,38 @@ int yield_handler(char *pid)
 	return 0;	
 }
 
-bool admission_control(void)
+
+bool admission_control(char *buf)
 {
-    return false;
+    struct list_head *pos;
+    task_node_t *entry;
+    pid_t curr_pid;
+    unsigned long curr_period;
+    unsigned long curr_proc_time;
+    int fixed_proc_time;
+    int fixed_period;
+    int ratio = 0;
+
+    read_process_info(buf, &curr_pid, &curr_period, &curr_proc_time);
+    ratio+=(int)curr_proc_time*1000/((int)curr_period);
+
+    list_for_each(pos, &taskList) {
+        entry = list_entry(pos, task_node_t, process_node);
+        fixed_proc_time = (int)entry->proc_time*1000;
+        fixed_period = (int)entry->period;
+        ratio += fixed_proc_time/fixed_period;
+
+    }
+    if(ratio <= 693)
+    {
+        printk(KERN_ALERT "Process %u pass the admission control", curr_pid);
+        return true;
+    }
+    else
+    {
+        printk(KERN_ALERT "Process %u did not pass the admission control", curr_pid);
+        return false;
+    }
 }
 
 // Called when user application registered a process
@@ -306,16 +341,18 @@ static ssize_t mp2_write(struct file *file, const char __user *buffer, size_t co
 	char * buf = (char*)kmalloc(count+1, GFP_KERNEL);
 	int ret = -1;
     struct list_head *pos;
-    {
-        /* data */
-    };
-
+    
 	if (count > MAX_BUF_SIZE - 1) {
 		count = MAX_BUF_SIZE - 1;
 	}
 
 	copy_from_user(buf, buffer, count);
 	buf[count] = '\0';
+
+    if(!admission_control(buf))
+    {
+        return 0;
+    }
 
 	printk(KERN_ALERT "MP2_WRITE CALLED, INPUT:%s\n", buf);
 	
