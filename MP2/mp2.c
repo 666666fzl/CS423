@@ -5,7 +5,6 @@
 #include <linux/kernel.h>
 #include <linux/timer.h>
 #include <linux/proc_fs.h>
-#include <linux/workqueue.h>
 #include <linux/slab.h>
 #include <linux/list.h>
 #include <asm/uaccess.h>
@@ -27,6 +26,8 @@ MODULE_DESCRIPTION("CS-423 MP2");
 #define READY_STATE 1
 #define RUNNING_STATE 2
 
+// A self-defined structure represents PCB
+// Index by pid, used as a node in the task linked list
 typedef struct mp2_task_struct {
 	struct task_struct* linux_task;
 	struct timer_list wakeup_timer;
@@ -45,11 +46,11 @@ static struct proc_dir_entry *proc_dir;
 static struct proc_dir_entry *proc_entry;
 static struct mutex my_mutex;
 static struct kmem_cache *task_cache;
+static task_node_t *current_running_task;
+static struct task_struct *dispatching_task;
+static spinlock_t timer_lock;
 
 LIST_HEAD(taskList);
-task_node_t *current_running_task;
-struct task_struct *dispatching_task;
-spinlock_t timer_lock;
 
 // Called when user application use "cat" or "fopen"
 // The function read the status file and print the information related out
@@ -63,6 +64,7 @@ static ssize_t mp2_read(struct file *file, char __user * buffer, size_t count, l
     int currByte;
     buf = (char*) kmalloc(1024, GFP_KERNEL);
     
+    // read each node on the list and print the information as [pid: period, proc_time] to user
 	mutex_lock(&my_mutex);
     list_for_each(pos, &taskList) {
         tmp = list_entry(pos, task_node_t, process_node);
@@ -85,7 +87,9 @@ static ssize_t mp2_read(struct file *file, char __user * buffer, size_t count, l
 	
 }
 
-void pick_task_to_run(void)
+// Helper function for dispatching thread to pick the next running task
+// We will pick the ready task with highest priority
+static void pick_task_to_run(void)
 {
 	task_node_t *entry;
 	task_node_t *prev_task;
@@ -93,7 +97,9 @@ void pick_task_to_run(void)
 	struct sched_param old_sparam; 
 	struct list_head *pos;
 	task_node_t *next_task=NULL;
-	printk(KERN_ALERT "start to searching for next running task");
+
+	printk(KERN_ALERT "START TO PICK NEXT TASK");
+
 	if(current_running_task)
 	{
 		list_for_each(pos, &taskList) {
@@ -153,7 +159,7 @@ void pick_task_to_run(void)
 
 // Called when one of the tasks is waked up
 // The function checks if a context switch is needed and do the context switch
-int dispatching_thread(void *data)
+static int dispatching_thread(void *data)
 {
 	while(1)
 	{
@@ -174,7 +180,7 @@ int dispatching_thread(void *data)
 
 // Called when one of the task's timer is expired
 // Set the task to ready state and call the dispatching thread
-void _wakeup_timer_handler(unsigned long arg) 
+void wakeup_timer_handler(unsigned long arg) 
 {
 	unsigned long flags;
 	task_node_t *curr_node;
@@ -188,7 +194,9 @@ void _wakeup_timer_handler(unsigned long arg)
 	wake_up_process(dispatching_task);
 }
 
-void read_process_info(char *info, pid_t *pid, unsigned long *period, unsigned long *proc_time)
+// Helper function for parsing pid, period and process time
+// We store the parsed information in the call-by-reference parameters
+void _read_process_info(char *info, pid_t *pid, unsigned long *period, unsigned long *proc_time)
 {
     int i = 0;
     char *pch;
@@ -223,28 +231,27 @@ void read_process_info(char *info, pid_t *pid, unsigned long *period, unsigned l
 
 // Called when a new self-defined task node is allocated
 // Store user input, set task state and create timer for it
-void init_node(task_node_t* new_task, char* buf) 
+static void init_node(task_node_t* new_task, char* buf) 
 {
-
     struct timer_list *curr_timer;
-    read_process_info(buf, &(new_task->pid), &(new_task->period), &(new_task->proc_time));
-    printk(KERN_ALERT "period %lu, process time %lu", new_task->period, new_task->proc_time);
+
+    // set up member variables
+    _read_process_info(buf, &(new_task->pid), &(new_task->period), &(new_task->proc_time));
 	new_task -> state = SLEEPING_STATE;
     new_task -> linux_task = find_task_by_pid(new_task->pid);
     new_task -> start_time = (struct timeval*)kmalloc(sizeof(struct timeval), GFP_KERNEL);
     do_gettimeofday(new_task->start_time);
+    
     // create task wakeup timer
     curr_timer = &(new_task->wakeup_timer);
     init_timer(curr_timer);
     curr_timer->data = (unsigned long)new_task;
-    //curr_timer->expires = jiffies + msecs_to_jiffies(new_task->period - new_task->proc_time);
-    curr_timer->function = _wakeup_timer_handler;
-    //add_timer(curr_timer);
+    curr_timer->function = wakeup_timer_handler;
 }
 
 // Add a newly created task node into the existing task linked list
 // Ordered bt task period (shortest period first)
-int add_to_list(char *buf)
+static int add_to_list(char *buf)
 {
 	struct list_head *pos;
 	task_node_t *entry;
@@ -266,13 +273,17 @@ int add_to_list(char *buf)
 	return -1;
 }
 
-// Free a allocated task node
-void destruct_node(struct list_head *pos)
+// Free a allocated task node, remove it from the list
+static void destruct_node(struct list_head *pos)
 {
 	task_node_t *entry;
+
 	mutex_lock(&my_mutex);
 	entry = list_entry(pos, task_node_t, process_node);
 	printk(KERN_ALERT "START DESTRUCT TASK: %u",entry->pid);
+
+    // if the current running task would like to unregister itself,
+    // set current_running_task to NULL
 	if(current_running_task && entry->pid == current_running_task->pid)
 	{
 		current_running_task = NULL;
@@ -283,8 +294,9 @@ void destruct_node(struct list_head *pos)
 	mutex_unlock(&my_mutex);
 }
 
-// Traverse the entire task linked list and find a task according to its pid
-struct list_head *find_task_node_by_pid(char *pid)
+// Helper function that traverse the entire task linked list and 
+// find a task according to its pid
+static struct list_head *find_task_node_by_pid(char *pid)
 {
     struct list_head *pos;
     struct list_head *next;
@@ -310,7 +322,7 @@ struct list_head *find_task_node_by_pid(char *pid)
 
 // Called when user input "Y" as command
 // Put yield task into sleeping state and start its wakeup timer
-int yield_handler(char *pid)
+static int _yield_handler(char *pid)
 {
 	task_node_t *yield_task;
     struct list_head *yield_pos;
@@ -333,8 +345,10 @@ int yield_handler(char *pid)
 	return 0;	
 }
 
-
-bool admission_control(char *buf)
+// Called when a new task incoming
+// Check if the new task and the existing tasks could be scheduled without
+// missing deadlines according to thir process time and period
+static bool admission_control(char *buf)
 {
     struct list_head *pos;
     task_node_t *entry;
@@ -345,7 +359,7 @@ bool admission_control(char *buf)
     int fixed_period;
     int ratio = 0;
 
-    read_process_info(buf, &curr_pid, &curr_period, &curr_proc_time);
+    _read_process_info(buf, &curr_pid, &curr_period, &curr_proc_time);
     ratio+=(int)curr_proc_time*1000/((int)curr_period);
 
 	mutex_lock(&my_mutex);
@@ -399,7 +413,7 @@ static ssize_t mp2_write(struct file *file, const char __user *buffer, size_t co
 	else if (buf[0] == 'Y') {
 	// 2.yield: Y,PID
 		printk(KERN_ALERT "YIELD PID:%s", buf+2);
-		yield_handler(buf+2);
+		_yield_handler(buf+2);
 	}
 	else if (buf[0] == 'D') {
 	// 3.unregister: D,PID

@@ -49,6 +49,8 @@ int yield(pid_t pid)
 	return byte_write;
 }
 
+// The self-defined job for each task to do
+// calculate the nth fibonacci 
 void do_job(void)
 {
     int n = 10000000, first = 1, second = 1, ret, i;
@@ -61,6 +63,7 @@ void do_job(void)
     }
 }
 
+// check if the pid is existing in our proc file
 int check_status(pid_t pid) 
 {
     ssize_t read;
