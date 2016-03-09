@@ -62,6 +62,27 @@ void do_job(void)
     printf ( "Current local time and date: %s", asctime (timeinfo) );
 }
 
+bool check_status(pid_t pid) 
+{
+    ssize_t read;
+    char *line = NULL;
+    size_t len = 0;
+    FILE * fp = fopen(PROC_FILE, "a+");
+    if(!fp) {
+        perror("file doesn't exist\n");
+        return -1;
+    }
+
+    while ((read = getline(&line, &len, fp)) != -1) {
+        char[20] pid_buf;
+        if(strcmp(line, itoa(pid, pid_buf, 10))==0)){
+            return true;
+        }
+    }
+
+    return false;
+}
+
 int main(int argc, char* argv[])
 {
     /*if(argc < 4)
@@ -87,10 +108,15 @@ int main(int argc, char* argv[])
     }
     while(1);
     return 0;*/
+    unsigned long per = strtoul(argv[1], NULL, 10);
+    unsigned long proc_t = strtoul(argv[2], NULL, 10);
+
     pid_t pid = getpid();
-    reg(pid, PERIOD, PROC_TIME); //Proc filesystem
-//    list = read_status(); //Proc filesystem: Verify the process was admitted 
-  //  if (!process in the list) exit 1;
+
+    reg(pid, per, proc_t); //Proc filesystem
+
+    if (!check_status(pid)) exit 1; //Proc filesystem: Verify the process was admitted 
+
     //setup everything needed for real-time loop: t0=gettimeofday() 
     yield(pid); //Proc filesystem
     //this is the real-time loop
