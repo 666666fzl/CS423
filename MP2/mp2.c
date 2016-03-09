@@ -98,11 +98,12 @@ void pick_task_to_run(void)
 	{
 		list_for_each(pos, &taskList) {
 			entry = list_entry(pos, task_node_t, process_node);
-			if (entry->period < current_running_task->period && entry->state == READY_STATE) {
+			if (entry->state == READY_STATE) {
 				next_task = entry;
 				break;
 			}
 		}
+		
 		prev_task = current_running_task;
 		if(prev_task->state == RUNNING_STATE)
 		{
@@ -127,17 +128,28 @@ void pick_task_to_run(void)
 	}
 	else
 	{
-        if(!list_empty(&taskList)) {
-            next_task = list_first_entry(&taskList, task_node_t, process_node);
-            if(next_task->state==READY_STATE)
-			{
-				new_sparam.sched_priority=MAX_USER_RT_PRIO-1;
-				sched_setscheduler(next_task->linux_task, SCHED_FIFO, &new_sparam);
-				do_gettimeofday(next_task->start_time);
-				wake_up_process(next_task->linux_task);
-				current_running_task = next_task;
-				current_running_task->state = RUNNING_STATE;
-        	}
+		printk(KERN_ALERT "cur_run_task = NULL\n");
+		if(list_empty(&taskList))
+		{
+			return;
+		}
+		printk(KERN_ALERT "list is not empty\n");
+		list_for_each(pos, &taskList) {
+			entry = list_entry(pos, task_node_t, process_node);
+			if (entry->state == READY_STATE) {
+				next_task = entry;
+				break;
+			}
+		}
+		if(next_task && next_task->state==READY_STATE)
+		{
+			printk(KERN_ALERT "next_task is not empty");
+			new_sparam.sched_priority=MAX_USER_RT_PRIO-1;
+			sched_setscheduler(next_task->linux_task, SCHED_FIFO, &new_sparam);
+			do_gettimeofday(next_task->start_time);
+			wake_up_process(next_task->linux_task);
+			current_running_task = next_task;
+			current_running_task->state = RUNNING_STATE;
 		}
     }
 }
@@ -150,10 +162,12 @@ int dispatching_thread(void *data)
 	{
 		if(kthread_should_stop())
 		{
-			printk(KERN_ALERT "kthread should not be running");
+			printk(KERN_ALERT "KTHREAD FINISH ITS JOB AND SHOULD STOP");
 		}
-		printk(KERN_ALERT "dispatching thread fired");
+		printk(KERN_ALERT "DISPATCHING THREAD STARTS WORKING");
+		mutex_lock(&my_mutex);	
 		pick_task_to_run();	
+		mutex_unlock(&my_mutex);
 		set_current_state(TASK_UNINTERRUPTIBLE);
 		schedule();
 	}
@@ -167,11 +181,11 @@ void _wakeup_timer_handler(unsigned long arg)
 	unsigned long flags;
 	task_node_t *curr_node;
 	curr_node = (task_node_t *)arg;
-	printk(KERN_ALERT "wake up timer handler of process %u gets fired", curr_node->pid);
 	spin_lock_irqsave(&timer_lock, flags);
 	if (curr_node != current_running_task) { 
 		curr_node -> state = READY_STATE;
 	}
+	printk(KERN_ALERT "PROCESS %u IS WAKE UP, READY NOW", curr_node->pid);
 	spin_unlock_irqrestore(&timer_lock, flags);
 	wake_up_process(dispatching_task);
 }
@@ -225,9 +239,9 @@ void init_node(task_node_t* new_task, char* buf)
     curr_timer = &(new_task->wakeup_timer);
     init_timer(curr_timer);
     curr_timer->data = (unsigned long)new_task;
-    curr_timer->expires = jiffies + msecs_to_jiffies(new_task->period - new_task->proc_time);
+    //curr_timer->expires = jiffies + msecs_to_jiffies(new_task->period - new_task->proc_time);
     curr_timer->function = _wakeup_timer_handler;
-    add_timer(curr_timer);
+    //add_timer(curr_timer);
 }
 
 // Add a newly created task node into the existing task linked list
@@ -240,15 +254,17 @@ int add_to_list(char *buf)
 
 	init_node(new_task, buf);
 
+	mutex_lock(&my_mutex);
     list_for_each(pos, &taskList) {
         entry = list_entry(pos, task_node_t, process_node);
         if (entry->period > new_task->period) {
 		    list_add_tail(&new_task->process_node, pos);
+			mutex_unlock(&my_mutex);
 			return -1;
         }
     }
-
 	list_add_tail(&(new_task->process_node), &taskList);	
+	mutex_unlock(&my_mutex);
 	return -1;
 }
 
@@ -256,10 +272,17 @@ int add_to_list(char *buf)
 void destruct_node(struct list_head *pos)
 {
 	task_node_t *entry;
-	list_del(pos);
+	mutex_lock(&my_mutex);
 	entry = list_entry(pos, task_node_t, process_node);
-	kmem_cache_free(task_cache, entry);
+	printk(KERN_ALERT "START DESTRUCT TASK: %u",entry->pid);
+	if(current_running_task && entry->pid == current_running_task->pid)
+	{
+		current_running_task = NULL;
+	}
+	list_del(pos);
 	del_timer(&(entry->wakeup_timer));
+	kmem_cache_free(task_cache, entry);
+	mutex_unlock(&my_mutex);
 }
 
 // Traverse the entire task linked list and find a task according to its pid
@@ -301,11 +324,8 @@ int yield_handler(char *pid)
 	yield_task->state = SLEEPING_STATE;
 	do_gettimeofday(&curr_time);
 	actual_proc_time = (curr_time.tv_sec*1000 - yield_task->start_time->tv_sec*1000) + (curr_time.tv_usec/1000 - yield_task->start_time->tv_usec /1000);
-    printk(KERN_ALERT "process %u yield %lu ms", yield_task->pid, (yield_task->period-actual_proc_time));
-	mod_timer(&(yield_task->wakeup_timer), 
-        jiffies + msecs_to_jiffies(yield_task->period - actual_proc_time));
+	mod_timer(&(yield_task->wakeup_timer), jiffies + msecs_to_jiffies(yield_task->period - actual_proc_time));
 	set_task_state(yield_task->linux_task, TASK_UNINTERRUPTIBLE);
-	printk(KERN_ALERT "got here1\n");
 	current_running_task = NULL;
 	wake_up_process(dispatching_task);
 	
@@ -330,6 +350,7 @@ bool admission_control(char *buf)
     read_process_info(buf, &curr_pid, &curr_period, &curr_proc_time);
     ratio+=(int)curr_proc_time*1000/((int)curr_period);
 
+	mutex_lock(&my_mutex);
     list_for_each(pos, &taskList) {
         entry = list_entry(pos, task_node_t, process_node);
         fixed_proc_time = (int)entry->proc_time*1000;
@@ -337,6 +358,7 @@ bool admission_control(char *buf)
         ratio += fixed_proc_time/fixed_period;
 
     }
+	mutex_unlock(&my_mutex);
     if(ratio <= 693)
     {
         printk(KERN_ALERT "Process %u pass the admission control", curr_pid);
@@ -442,6 +464,9 @@ void __exit mp2_exit(void)
     // remove file entry and repository  
     remove_proc_entry(FILENAME, proc_dir);
     remove_proc_entry(DIRECTORY, NULL);
+
+	// destroy mutex
+
 
     printk(KERN_ALERT "MP2 MODULE UNLOADED\n");
 }

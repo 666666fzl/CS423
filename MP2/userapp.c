@@ -115,9 +115,10 @@ int main(int argc, char* argv[])
 		do_job();
 		gettimeofday(&t0, NULL);
         job_process_time = t0.tv_usec/1000 + t0.tv_sec*1000 - wakeup_time;
-		yield(pid); //Proc filesystem
-        printf ( "pid: %u, spent: %ld ms\n", pid, job_process_time);
+        printf ( "pid: %u, proc time: %ld ms\n", pid, job_process_time);
+		yield(pid);
 	}
     unreg(pid);
+	return 0;
 }
 
