@@ -13,6 +13,7 @@
 #include <linux/sched.h>
 #include <linux/string.h>
 #include <linux/kthread.h>
+#include <linux/spinlock.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("23");
@@ -48,6 +49,7 @@ static struct kmem_cache *task_cache;
 LIST_HEAD(taskList);
 task_node_t *current_running_task;
 struct task_struct *dispatching_task;
+spinlock_t timer_lock;
 
 // Called when user application use "cat" or "fopen"
 // The function read the status file and print the information related out
@@ -111,7 +113,7 @@ void pick_task_to_run(void)
 		old_sparam.sched_priority=0; 
 		sched_setscheduler(prev_task->linux_task, SCHED_NORMAL, &old_sparam);
 		
-		if(next_task)
+		if(next_task && next_task->state==READY_STATE)
 		{	
 			// new task
 			printk(KERN_ALERT "PROCESS %u START TO RUN", next_task->pid);
@@ -127,13 +129,16 @@ void pick_task_to_run(void)
 	{
         if(!list_empty(&taskList)) {
             next_task = list_first_entry(&taskList, task_node_t, process_node);
-            new_sparam.sched_priority=MAX_USER_RT_PRIO-1;
-            sched_setscheduler(next_task->linux_task, SCHED_FIFO, &new_sparam);
-            do_gettimeofday(next_task->start_time);
-            wake_up_process(next_task->linux_task);
-            current_running_task = next_task;
-            current_running_task->state = RUNNING_STATE;
-        }
+            if(next_task->state==READY_STATE)
+			{
+				new_sparam.sched_priority=MAX_USER_RT_PRIO-1;
+				sched_setscheduler(next_task->linux_task, SCHED_FIFO, &new_sparam);
+				do_gettimeofday(next_task->start_time);
+				wake_up_process(next_task->linux_task);
+				current_running_task = next_task;
+				current_running_task->state = RUNNING_STATE;
+        	}
+		}
     }
 }
 
@@ -149,7 +154,7 @@ int dispatching_thread(void *data)
 		}
 		printk(KERN_ALERT "dispatching thread fired");
 		pick_task_to_run();	
-		set_current_state(TASK_INTERRUPTIBLE);
+		set_current_state(TASK_UNINTERRUPTIBLE);
 		schedule();
 	}
 	return 0;
@@ -159,13 +164,16 @@ int dispatching_thread(void *data)
 // Set the task to ready state and call the dispatching thread
 void _wakeup_timer_handler(unsigned long arg) 
 {
+	unsigned long flags;
 	task_node_t *curr_node;
-	printk(KERN_ALERT "wake up timer handler gets fired");
 	curr_node = (task_node_t *)arg;
+	printk(KERN_ALERT "wake up timer handler of process %u gets fired", curr_node->pid);
+	spin_lock_irqsave(&timer_lock, flags);
 	if (curr_node != current_running_task) { 
 		curr_node -> state = READY_STATE;
-		wake_up_process(dispatching_task);
 	}
+	spin_unlock_irqrestore(&timer_lock, flags);
+	wake_up_process(dispatching_task);
 }
 
 void read_process_info(char *info, pid_t *pid, unsigned long *period, unsigned long *proc_time)
@@ -208,7 +216,8 @@ void init_node(task_node_t* new_task, char* buf)
 
     struct timer_list *curr_timer;
     read_process_info(buf, &(new_task->pid), &(new_task->period), &(new_task->proc_time));
-    new_task -> state = SLEEPING_STATE;
+    printk(KERN_ALERT "period %lu, process time %lu", new_task->period, new_task->proc_time);
+	new_task -> state = SLEEPING_STATE;
     new_task -> linux_task = find_task_by_pid(new_task->pid);
     new_task -> start_time = (struct timeval*)kmalloc(sizeof(struct timeval), GFP_KERNEL);
     do_gettimeofday(new_task->start_time);
@@ -216,7 +225,7 @@ void init_node(task_node_t* new_task, char* buf)
     curr_timer = &(new_task->wakeup_timer);
     init_timer(curr_timer);
     curr_timer->data = (unsigned long)new_task;
-    //curr_timer->expires = jiffies + msecs_to_jiffies(new_task->period - new_task->proc_time);
+    curr_timer->expires = jiffies + msecs_to_jiffies(new_task->period - new_task->proc_time);
     curr_timer->function = _wakeup_timer_handler;
     add_timer(curr_timer);
 }
@@ -284,18 +293,23 @@ int yield_handler(char *pid)
 {
 	task_node_t *yield_task;
     struct list_head *yield_pos;
-
+	struct timeval curr_time;
+	unsigned long actual_proc_time;
 	yield_pos = find_task_node_by_pid(pid);
     yield_task = list_entry(yield_pos, task_node_t, process_node);
-
+	
 	yield_task->state = SLEEPING_STATE;
-
-    mod_timer(&(yield_task->wakeup_timer), 
-        jiffies + msecs_to_jiffies(yield_task->period - ( yield_task->start_time->tv_sec*1000000+yield_task->start_time->tv_usec )));
+	do_gettimeofday(&curr_time);
+	actual_proc_time = (curr_time.tv_sec*1000 - yield_task->start_time->tv_sec*1000) + (curr_time.tv_usec/1000 - yield_task->start_time->tv_usec /1000);
+    printk(KERN_ALERT "process %u yield %lu ms", yield_task->pid, (yield_task->period-actual_proc_time));
+	mod_timer(&(yield_task->wakeup_timer), 
+        jiffies + msecs_to_jiffies(yield_task->period - actual_proc_time));
 	set_task_state(yield_task->linux_task, TASK_UNINTERRUPTIBLE);
+	printk(KERN_ALERT "got here1\n");
 	current_running_task = NULL;
 	wake_up_process(dispatching_task);
-	set_current_state(TASK_INTERRUPTIBLE);
+	
+	set_current_state(TASK_UNINTERRUPTIBLE);
 	schedule();	
 
 	return 0;	
@@ -405,8 +419,8 @@ int __init mp2_init(void)
 
     // init mutex lock
     mutex_init(&my_mutex);
-
-    printk(KERN_ALERT "MP2 MODULE LOADED\n");
+   	spin_lock_init(&timer_lock);
+	printk(KERN_ALERT "MP2 MODULE LOADED\n");
     return 0;
 }
 
