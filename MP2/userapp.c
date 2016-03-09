@@ -87,6 +87,8 @@ int main(int argc, char* argv[])
     }
     while(1);
     return 0;*/
+    unsigned long per = strtoul(argv[1], NULL, 10);
+    unsigned long proc_t = strtoul(argv[2], NULL, 10);
     pid_t pid = getpid();
     reg(pid, PERIOD, PROC_TIME); //Proc filesystem
 //    list = read_status(); //Proc filesystem: Verify the process was admitted 
