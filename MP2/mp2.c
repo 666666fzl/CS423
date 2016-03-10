@@ -201,8 +201,8 @@ void _read_process_info(char *info, pid_t *pid, unsigned long *period, unsigned 
     int i = 0;
     char *pch;
     char *dataHolder = (char*)kmalloc(strlen(info)+1, GFP_KERNEL);
-    
-    if(dataHolder)
+    char *start_pos = dataHolder;
+	if(dataHolder)
     {   
         strcpy(dataHolder, info);
     }   
@@ -223,9 +223,11 @@ void _read_process_info(char *info, pid_t *pid, unsigned long *period, unsigned 
         else
         {   
             sscanf(pch, "%lu", proc_time);
-        }   
+        }
+		//kfree(pch);   
         pch = strsep(&dataHolder, " ,");
     }   
+	kfree(start_pos);
 }
     
 
@@ -423,9 +425,10 @@ static ssize_t mp2_write(struct file *file, const char __user *buffer, size_t co
 		printk(KERN_ALERT "UNREGISTERED PID: %s", buf+2);
 	}
 	else {
+		kfree(buf);
 		return 0;
 	}
-
+	kfree(buf);
 	return ret;
 }
 

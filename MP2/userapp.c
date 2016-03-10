@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <sys/time.h>
-#define PROC_TIME 46
+#define PROC_TIME 47
 #define PROC_FILE "/proc/mp2/status"
 
  // * params: the pid, period(ms) and process time(ms) for the task to be registered
@@ -50,17 +50,19 @@ int yield(pid_t pid)
 }
 
 // The self-defined job for each task to do
-// calculate the nth fibonacci 
-void do_job(void)
+// Correct return result should be 0
+int do_job(void)
 {
-    int n = 10000000, first = 1, second = 1, ret, i;
+    int n = 10000000, ret = 0, i;
 
-    // fibonacci calculation
     for(i = 0; i < n; i++) {
-        ret = first + second;
-        first = second;
-        second = ret;
+        ret = ret++;
     }
+	
+	for(i = 0; i < n; i++) {
+		ret = ret--;
+	}
+	return ret;
 }
 
 // check if the pid is existing in our proc file
@@ -90,9 +92,10 @@ int main(int argc, char* argv[])
 {
     unsigned long per = strtoul(argv[1], NULL, 10);
 	pid_t pid = getpid();
-    int i;
+    int i, ret;
 	long int wakeup_time, job_process_time;
     struct timeval t0, t1;
+	time_t current_time;
     
 	if(argc < 2)
     {   
@@ -100,7 +103,10 @@ int main(int argc, char* argv[])
         return -1; 
     }
 
-    reg(pid, per, PROC_TIME); //Proc filesystem
+    current_time = time(0);
+    printf("pid: %u, start time: %s", pid, ctime(&current_time));
+    
+	reg(pid, per, PROC_TIME); //Proc filesystem
 
     if (check_status(pid)) {
 		return -1; //Proc filesystem: Verify the process was admitted 
@@ -115,13 +121,16 @@ int main(int argc, char* argv[])
 		gettimeofday(&t1, NULL);
         wakeup_time = t1.tv_usec/1000 + t1.tv_sec * 1000;
 		printf("pid: %u, wake-up time: %ld ms\n", pid, wakeup_time - (t0.tv_usec/1000 + t0.tv_sec * 1000));
-		do_job();
+		ret = do_job();
 		gettimeofday(&t0, NULL);
         job_process_time = t0.tv_usec/1000 + t0.tv_sec*1000 - wakeup_time;
-        printf ( "pid: %u, proc time: %ld ms\n", pid, job_process_time);
+        printf ( "pid: %u, proc time: %ld ms, result: %d\n", pid, job_process_time, ret);
 		yield(pid);
 	}
     unreg(pid);
+    
+	current_time = time(0);
+	printf("pid: %u, end time: %s", pid, ctime(&current_time));
 	return 0;
 }
 
