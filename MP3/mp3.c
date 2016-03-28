@@ -13,6 +13,9 @@
 #include <linux/string.h>
 #include <linux/kthread.h>
 #include <linux/spinlock.h>
+#include <linux/fs.h>
+#include <linux/cdev.h>
+#include <linux/workqueue.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("23");
@@ -45,6 +48,8 @@ static struct workqueue_struct * delayed_workqueue;
 struct delayed_work *measure_info_obj;
 unsigned long * shared_mem_buffer;
 unsigned int buffer_iterator;
+static struct cdev *my_cdev;
+static dev_t my_cdev_num;
 
 LIST_HEAD(taskList);
 
@@ -261,6 +266,38 @@ static const struct file_operations mp3_file = {
     .write = mp3_write,
 };
 
+static int cdev_open(struct inode * id, struct file *f)
+{
+	printk(KERN_ALERT "char dev open\n");
+	return 0;
+}
+
+static int cdev_release(struct inode * id, struct file *f)
+{
+	printk(KERN_ALERT "char dev release\n");
+	return 0;
+}
+
+static int cdev_mmap(struct file *f, struct vm_area_struct *vas)
+{
+
+}
+
+static const struct file_operations cdev_ops = {
+    .owner = THIS_MODULE,
+    .open = cdev_open,
+    .mmap = cdev_mmap,
+    .release = cdev_release
+};
+
+void init_cdev(void)
+{
+	alloc_chrdev_region(&my_cdev_num, 0, 1, "mp3_cdev");	
+	my_cdev = cdev_alloc();
+	cdev_init(my_cdev, &cdev_ops);
+	cdev_add(my_cdev, my_cdev_num, 1);
+}
+
 // mp3_init - Called when module is loaded
 int __init mp3_init(void)
 {
@@ -270,8 +307,15 @@ int __init mp3_init(void)
     // create proc directory and file entry
     proc_dir = proc_mkdir(DIRECTORY, NULL);
     proc_entry = proc_create(FILENAME, 0666, proc_dir, & mp3_file);
-    delayed_workqueue = create_workqueue("delayed workqueue");
-    shared_mem_buffer = (unsigned long *)vmalloc(128*4*1024);    
+    
+	//create workqueue
+	delayed_workqueue = create_workqueue("delayed workqueue");
+    
+	//create the shared memory buffer
+	//NEED TO DO: activate PG_reserved bit
+	shared_mem_buffer = (unsigned long *)vmalloc(128*4*1024);    
+
+	init_cdev();
 
 	// create cache for slab allocator
 	task_cache = kmem_cache_create("task_cache", sizeof(task_node_t), 0, SLAB_HWCACHE_ALIGN, NULL);
