@@ -282,13 +282,13 @@ static int cdev_release(struct inode * id, struct file *f)
 static int cdev_mmap(struct file *f, struct vm_area_struct *vma)
 {
 	unsigned long length = TOTAL_PAGE_NUM*PAGE_SIZE;
-	void *vmalloc_area_ptr = (void*)shared_mem_buffer;
+	unsigned long *vmalloc_area_ptr = shared_mem_buffer;
 	unsigned long start = vma->vm_start;
 	while (length > 0) {
 		pfn = vmalloc_to_pfn(vmalloc_area_ptr);
 		remap_pfn_range(vma, start, pfn, PAGE_SIZE, vma->vm_page_prot);
 		start += PAGE_SIZE;
-		vmalloc_area_ptr += PAGE_SIZE;
+		vmalloc_area_ptr += PAGE_SIZE/(sizeof (unsigned long));
 		length -= PAGE_SIZE;
 	}
 	return 0;
