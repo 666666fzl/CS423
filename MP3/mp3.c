@@ -28,6 +28,7 @@ MODULE_DESCRIPTION("CS-423 MP3");
 #define SLEEPING_STATE 0
 #define READY_STATE 1
 #define RUNNING_STATE 2
+#define TOTAL_PAGE_NUM 128
 
 // A self-defined structure represents PCB
 // Index by pid, used as a node in the task linked list
@@ -278,9 +279,19 @@ static int cdev_release(struct inode * id, struct file *f)
 	return 0;
 }
 
-static int cdev_mmap(struct file *f, struct vm_area_struct *vas)
+static int cdev_mmap(struct file *f, struct vm_area_struct *vma)
 {
-
+	unsigned long length = TOTAL_PAGE_NUM*PAGE_SIZE;
+	void *vmalloc_area_ptr = (void*)shared_mem_buffer;
+	unsigned long start = vma->vm_start;
+	while (length > 0) {
+		pfn = vmalloc_to_pfn(vmalloc_area_ptr);
+		remap_pfn_range(vma, start, pfn, PAGE_SIZE, vma->vm_page_prot);
+		start += PAGE_SIZE;
+		vmalloc_area_ptr += PAGE_SIZE;
+		length -= PAGE_SIZE;
+	}
+	return 0;
 }
 
 static const struct file_operations cdev_ops = {
@@ -313,7 +324,7 @@ int __init mp3_init(void)
     
 	//create the shared memory buffer
 	//NEED TO DO: activate PG_reserved bit
-	shared_mem_buffer = (unsigned long *)vmalloc(128*4*1024);    
+	shared_mem_buffer = (unsigned long *)vmalloc(TOTAL_PAGE_NUM * PAGE_SIZE);    
 
 	init_cdev();
 
