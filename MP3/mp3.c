@@ -16,6 +16,8 @@
 #include <linux/fs.h>
 #include <linux/cdev.h>
 #include <linux/workqueue.h>
+#include <linux/vmalloc.h>
+#include <linux/mm.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("23");
@@ -30,6 +32,8 @@ MODULE_DESCRIPTION("CS-423 MP3");
 #define RUNNING_STATE 2
 #define TOTAL_PAGE_NUM 128
 
+static void _measure_info_worker(struct work_struct *);
+void _delayed_workqueue_init(void);
 // A self-defined structure represents PCB
 // Index by pid, used as a node in the task linked list
 typedef struct mp3_task_struct {
@@ -93,26 +97,27 @@ void write_process_to_shared_mem_buffer(void)
 	shared_mem_buffer[buffer_iterator++] = maj_flt_count;
 	shared_mem_buffer[buffer_iterator++] = cpu_utilization_count;
 
-	buffer_iterator %= 128*1024;
+	buffer_iterator = (buffer_iterator+4) % (TOTAL_PAGE_NUM*PAGE_SIZE/(sizeof (unsigned long)));
 }
 
-static void _measure_info_worker(struct delayed_work * measure_into_obj)
+static void _measure_info_worker(struct work_struct * measure_into_obj)
 {
 	update_process_info();
 	write_process_to_shared_mem_buffer();
-    _delay_workqueue_init();
+    _delayed_workqueue_init();
 }
 
-void _delay_workqueue_init(void)
+void _delayed_workqueue_init(void)
 {
-    if(list_empty(taskList))
+    if(list_empty(&taskList))
     {
         measure_info_obj = (struct delayed_work *)kmalloc(sizeof(struct delayed_work), GFP_ATOMIC);
     }
-    INIT_DELAYED_WORK(measure_info_obj, measure_info_worker);
+    INIT_DELAYED_WORK((struct delayed_work *)measure_info_obj, _measure_info_worker);
     queue_delayed_work(delayed_workqueue, measure_info_obj, msecs_to_jiffies(50));
 }
-	// 3.unregister: D,PID
+
+// 3.unregister: D,PID
 // Called when user application use "cat" or "fopen"
 // The function read the status file and print the information related out
 static ssize_t mp3_read(struct file *file, char __user * buffer, size_t count, loff_t * data)
@@ -130,7 +135,7 @@ static ssize_t mp3_read(struct file *file, char __user * buffer, size_t count, l
     list_for_each(pos, &taskList) {
         tmp = list_entry(pos, task_node_t, process_node);
         memset(currData, 0, MAX_BUF_SIZE);
-        currByte = sprintf(currData, "%u: %lu, %lu\n", tmp->pid, tmp->period, tmp->proc_time);
+        currByte = sprintf(currData, "%u\n", tmp->pid);
         strcat(buf, currData);
         copied += currByte;
     }
@@ -154,7 +159,7 @@ static ssize_t mp3_read(struct file *file, char __user * buffer, size_t count, l
 static void init_node(task_node_t* new_task, char* buf) 
 {
     // set up member variables
-    new_task->pid = buf;
+	sscanf(buf, "%u", &(new_task->pid));
     new_task -> linux_task = find_task_by_pid(new_task->pid);
 }
 
@@ -162,21 +167,11 @@ static void init_node(task_node_t* new_task, char* buf)
 // Ordered bt task period (shortest period first)
 static int add_to_list(char *buf)
 {
-	struct list_head *pos;
-	task_node_t *entry;
 	task_node_t *new_task = kmem_cache_alloc(task_cache, GFP_KERNEL);
 
 	init_node(new_task, buf);
 
 	mutex_lock(&my_mutex);
-    list_for_each(pos, &taskList) {
-        entry = list_entry(pos, task_node_t, process_node);
-        if (entry->period > new_task->period) {
-		    list_add_tail(&new_task->process_node, pos);
-			mutex_unlock(&my_mutex);
-			return -1;
-        }
-    }
 	list_add_tail(&(new_task->process_node), &taskList);	
 	mutex_unlock(&my_mutex);
 	return -1;
@@ -285,7 +280,7 @@ static int cdev_mmap(struct file *f, struct vm_area_struct *vma)
 	unsigned long *vmalloc_area_ptr = shared_mem_buffer;
 	unsigned long start = vma->vm_start;
 	while (length > 0) {
-		pfn = vmalloc_to_pfn(vmalloc_area_ptr);
+		unsigned long pfn = vmalloc_to_pfn(vmalloc_area_ptr);
 		remap_pfn_range(vma, start, pfn, PAGE_SIZE, vma->vm_page_prot);
 		start += PAGE_SIZE;
 		vmalloc_area_ptr += PAGE_SIZE/(sizeof (unsigned long));
@@ -325,7 +320,7 @@ int __init mp3_init(void)
 	//create the shared memory buffer
 	//NEED TO DO: activate PG_reserved bit
 	shared_mem_buffer = (unsigned long *)vmalloc(TOTAL_PAGE_NUM * PAGE_SIZE);    
-
+	buffer_iterator = 0;
 	init_cdev();
 
 	// create cache for slab allocator
@@ -333,7 +328,6 @@ int __init mp3_init(void)
 
     // init mutex lock
     mutex_init(&my_mutex);
-   	spin_lock_init(&timer_lock);
 	printk(KERN_ALERT "MP3 MODULE LOADED\n");
     return 0;
 }
