@@ -218,12 +218,12 @@ static struct list_head *find_task_node_by_pid(char *pid)
     return NULL;
 }
 
-static int registrer(char *buf){
+static int reg(char *buf){
     _delayed_workqueue_init();
     return add_to_list(buf);
 }
 
-static int deregister(char *buf){
+static int dereg(char *buf){
     struct list_head *pos;
     pos = find_task_node_by_pid(buf);
     destruct_node(pos);
@@ -255,12 +255,12 @@ static ssize_t mp3_write(struct file *file, const char __user *buffer, size_t co
 	// Check the starting char of buf, if:
 	// 1.register: R PID
 	if (buf[0] == 'R') {
-		ret = register(buf+2);
+		ret = reg(buf+2);
 		printk(KERN_ALERT "REGISTERED PID:%s", buf+2);
 	}
 	else if (buf[0] == 'U') {
 	// 2.unregister: U PID
-        ret = -1;
+        dereg(buf+2);
 		printk(KERN_ALERT "UNREGISTERED PID: %s", buf+2);
 	}
 	else {
