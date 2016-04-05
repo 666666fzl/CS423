@@ -218,8 +218,26 @@ static struct list_head *find_task_node_by_pid(char *pid)
     return NULL;
 }
 
+static int registrer(char *buf){
+    _delayed_workqueue_init();
+    return add_to_list(buf);
+}
+
+static int deregister(char *buf){
+    struct list_head *pos;
+    pos = find_task_node_by_pid(buf);
+    destruct_node(pos);
+
+    //if the PCB list is empty, delete the work queue
+    if(list_empty(&taskList))
+    {
+        kfree(measure_info_obj);
+        measure_info_obj = NULL;
+    }
+}
+
 // Called when user application registered a process
-// The function get the pid from the user and put it on the linked list, which actually write it in the status file
+// The function get the pid from the user and add/remove it on/from the linked list
 static ssize_t mp3_write(struct file *file, const char __user *buffer, size_t count, loff_t * data){
 	char * buf = (char*)kmalloc(count+1, GFP_KERNEL);
 	int ret = -1;
@@ -237,14 +255,11 @@ static ssize_t mp3_write(struct file *file, const char __user *buffer, size_t co
 	// Check the starting char of buf, if:
 	// 1.register: R PID
 	if (buf[0] == 'R') {
-        _delayed_workqueue_init();
-		ret = add_to_list(buf+2);
+		ret = register(buf+2);
 		printk(KERN_ALERT "REGISTERED PID:%s", buf+2);
 	}
 	else if (buf[0] == 'U') {
 	// 2.unregister: U PID
-        pos = find_task_node_by_pid(buf+2);
-        destruct_node(pos);
         ret = -1;
 		printk(KERN_ALERT "UNREGISTERED PID: %s", buf+2);
 	}
@@ -312,13 +327,13 @@ int __init mp3_init(void)
     #endif
     // create proc directory and file entry
     proc_dir = proc_mkdir(DIRECTORY, NULL);
-    proc_entry = proc_create(FILENAME, 0666, proc_dir, & mp3_file);
+    proc_entry = proc_create(FILENAME, 0666, proc_dir, &mp3_file);
     
 	//create workqueue
 	delayed_workqueue = create_workqueue("delayed workqueue");
     
 	//create the shared memory buffer
-	//NEED TO DO: activate PG_reserved bit
+	//TODO: activate PG_reserved bit
 	shared_mem_buffer = (unsigned long *)vmalloc(TOTAL_PAGE_NUM * PAGE_SIZE);    
 	buffer_iterator = 0;
 	init_cdev();
@@ -328,6 +343,7 @@ int __init mp3_init(void)
 
     // init mutex lock
     mutex_init(&my_mutex);
+
 	printk(KERN_ALERT "MP3 MODULE LOADED\n");
     return 0;
 }
