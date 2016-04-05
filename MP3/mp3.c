@@ -223,7 +223,7 @@ static int reg(char *buf){
     return add_to_list(buf);
 }
 
-static int dereg(char *buf){
+static void dereg(char *buf){
     struct list_head *pos;
     pos = find_task_node_by_pid(buf);
     destruct_node(pos);
@@ -241,7 +241,6 @@ static int dereg(char *buf){
 static ssize_t mp3_write(struct file *file, const char __user *buffer, size_t count, loff_t * data){
 	char * buf = (char*)kmalloc(count+1, GFP_KERNEL);
 	int ret = -1;
-    struct list_head *pos;
     
 	if (count > MAX_BUF_SIZE - 1) {
 		count = MAX_BUF_SIZE - 1;
