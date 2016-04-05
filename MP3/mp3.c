@@ -235,14 +235,14 @@ static ssize_t mp3_write(struct file *file, const char __user *buffer, size_t co
 	printk(KERN_ALERT "MP3_WRITE CALLED, INPUT:%s\n", buf);
 	
 	// Check the starting char of buf, if:
-	// 1.register: R,PID,PERIOD,COMPUTATION
+	// 1.register: R PID
 	if (buf[0] == 'R') {
         _delayed_workqueue_init();
 		ret = add_to_list(buf+2);
 		printk(KERN_ALERT "REGISTERED PID:%s", buf+2);
 	}
-	else if (buf[0] == 'D') {
-	// 3.unregister: D,PID
+	else if (buf[0] == 'U') {
+	// 2.unregister: U PID
         pos = find_task_node_by_pid(buf+2);
         destruct_node(pos);
         ret = -1;
