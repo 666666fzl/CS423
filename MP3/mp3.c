@@ -104,9 +104,7 @@ void write_process_to_shared_mem_buffer(void)
 	shared_mem_buffer[buffer_iterator+2] = maj_flt_count;
 	shared_mem_buffer[buffer_iterator+3] = cpu_utilization_count;
 
-    printk(KERN_ALERT "jiffies:%lu\nminflt:%lu\nmajflt:%lu\ncpu:%lu\n", shared_mem_buffer[buffer_iterator], shared_mem_buffer[buffer_iterator+1], shared_mem_buffer[buffer_iterator+2], shared_mem_buffer[buffer_iterator+3]);
-    printk(KERN_ALERT "%ld\n", TOTAL_PAGE_NUM*PAGE_SIZE/(sizeof (unsigned long)));
-	// update buffer_iterator
+ 	// update buffer_iterator
 	buffer_iterator += 4;
 
 	// if the rest memory space cannot handle the next iteration
@@ -135,7 +133,7 @@ void _delayed_workqueue_init(void)
 }
 
 // Called when user application use "cat" or "fopen"
-// The function read the status file and print the information related out
+// The function read the status file and print the pid of the existing task
 static ssize_t mp3_read(struct file *file, char __user * buffer, size_t count, loff_t * data)
 {
     size_t copied = 0;
@@ -146,7 +144,7 @@ static ssize_t mp3_read(struct file *file, char __user * buffer, size_t count, l
     int currByte;
     buf = (char*) kmalloc(1024, GFP_KERNEL);
     
-    // read each node on the list and print the information as [pid: period, proc_time] to user
+    // read each node on the list and print its pid user application
 	mutex_lock(&my_mutex);
     list_for_each(pos, &taskList) {
         tmp = list_entry(pos, task_node_t, process_node);
@@ -198,7 +196,7 @@ static void destruct_node(struct list_head *pos)
 
 	mutex_lock(&my_mutex);
 	entry = list_entry(pos, task_node_t, process_node);
-	printk(KERN_ALERT "START DESTRUCT TASK: %u",entry->pid);
+	printk(KERN_INFO "START DESTRUCT TASK: %u",entry->pid);
 	list_del(pos);
 	kmem_cache_free(task_cache, entry);
 	mutex_unlock(&my_mutex);
@@ -214,23 +212,17 @@ static struct list_head *find_task_node_by_pid(char *pid)
     char curr_pid[20];
 
     mutex_lock(&my_mutex);
-	printk(KERN_ALERT "1\n");
-	printk(KERN_ALERT "%s\n", pid);
     list_for_each_safe(pos, next, &taskList){
         curr = list_entry(pos, task_node_t, process_node);
         
 		memset(curr_pid, 0, 20);
         sprintf(curr_pid, "%u\n", curr->pid);
-		printk(KERN_ALERT "%s\n", curr_pid);
         if(strcmp(curr_pid, pid)==0)
         {
-        	printk(KERN_ALERT "here!\n");
 		    mutex_unlock(&my_mutex);
             return pos;
         }
     }
-
-    printk(KERN_ALERT "2\n");
 
     mutex_unlock(&my_mutex);
     return NULL;
@@ -267,7 +259,7 @@ static void unreg(char *buf){
     struct list_head *pos;
     pos = find_task_node_by_pid(buf);
     destruct_node(pos);
-	printk(KERN_ALERT "HAHA wo hu han san you hui lai le\n");
+	printk(KERN_INFO "HAHA wo hu han san you hui lai le\n");
 
     //if the PCB list is empty, delete the work queue
     if(list_empty(&taskList))
@@ -290,19 +282,19 @@ static ssize_t mp3_write(struct file *file, const char __user *buffer, size_t co
 	copy_from_user(buf, buffer, count);
 	buf[count] = '\0';
 
-	printk(KERN_ALERT "MP3_WRITE CALLED, INPUT:%s\n", buf);
+	printk(KERN_INFO "MP3_WRITE CALLED, INPUT:%s\n", buf);
 	
 	// Check the starting char of buf:
 	// 1.register: R PID
 	if (buf[0] == 'R') {
 		ret = reg(buf+2);
-		printk(KERN_ALERT "REGISTERED PID:%s", buf+2);
+		printk(KERN_INFO "REGISTERED PID:%s", buf+2);
 	}
 	else if (buf[0] == 'U') {
 	// 2.unregister: U PID
-		printk(KERN_ALERT "UNREGISTERING PID: %s", buf+2);
+		printk(KERN_INFO "UNREGISTERING PID: %s", buf+2);
         unreg(buf+2);
-		printk(KERN_ALERT "UNREGISTERED PID: %s", buf+2);
+		printk(KERN_INFO "UNREGISTERED PID: %s", buf+2);
 	}
 	else {
 		kfree(buf);
@@ -321,14 +313,14 @@ static const struct file_operations mp3_file = {
 // cdev open method
 static int cdev_open(struct inode * id, struct file *f)
 {
-	printk(KERN_ALERT "CHAR DEV OPEN\n");
+	printk(KERN_INFO "CHAR DEV OPEN\n");
 	return 0;
 }
 
 // cdev last close method
 static int cdev_release(struct inode * id, struct file *f)
 {
-	printk(KERN_ALERT "CHAR DEV RELEASED\n");
+	printk(KERN_INFO "CHAR DEV RELEASED\n");
 	return 0;
 }
 
@@ -336,23 +328,19 @@ static int cdev_release(struct inode * id, struct file *f)
 // so that it can be contiguous
 static int cdev_mmap(struct file *f, struct vm_area_struct *vma)
 {
-	unsigned long length = TOTAL_PAGE_NUM*PAGE_SIZE;
+	unsigned long length = vma->vm_end - vma->vm_start;
 	unsigned long *vmalloc_area_ptr = shared_mem_buffer;
 	unsigned long start = vma->vm_start;
     unsigned long pfn;
     struct page *page; 
 	while (length > 0) {
 		pfn = vmalloc_to_pfn(vmalloc_area_ptr);
-		page = pfn_to_page(pfn);
-
-        // set PG_reserved for each page in order to disable management 
-        // of allocated pages by the virtual memory system
-		set_bit(PG_reserved, &(page->flags));
-		remap_pfn_range(vma, start, pfn, PAGE_SIZE, PAGE_SHARED);
+	    remap_pfn_range(vma, start, pfn, PAGE_SIZE, vma->vm_page_prot);
 		start += PAGE_SIZE;
 		vmalloc_area_ptr += PAGE_SIZE/(sizeof (unsigned long));
 		length -= PAGE_SIZE;
 	}
+    printk(KERN_INFO "CDEV MMAP DONE");
 	return 0;
 }
 
@@ -372,11 +360,28 @@ void init_cdev(void)
 	cdev_add(my_cdev, my_cdev_num, 1);
 }
 
+// allocate the buffer that will be shared with user
+// set pg_reserved for each page allocated
+void allocate_shared_mem_buffer(void)
+{
+    unsigned int i = 0;
+    shared_mem_buffer = (unsigned long *)vmalloc(TOTAL_PAGE_NUM * PAGE_SIZE);    
+    buffer_iterator = 0;
+
+    while (i < TOTAL_PAGE_NUM * PAGE_SIZE) {
+        (void*)(((unsigned long)vmalloc_buffer)+ i))
+        SetPageReserved(vmalloc_to_page((void *)(((unsigned long)(shared_mem_buffer)) + i)));
+        i += PAGE_SIZE;
+    }
+    
+    return;
+}
+
 // mp3_init - Called when the module is loaded
 int __init mp3_init(void)
 {
     #ifdef DEBUG
-    printk(KERN_ALERT "MP3 MODULE LOADING\n");
+    printk(KERN_INFO "MP3 MODULE LOADING\n");
     #endif
     // create proc directory and file entry
     proc_dir = proc_mkdir(DIRECTORY, NULL);
@@ -386,9 +391,7 @@ int __init mp3_init(void)
 	delayed_workqueue = create_workqueue("delayed workqueue");
     
 	//create the shared memory buffer
-	//TODO: activate PG_reserved bit
-	shared_mem_buffer = (unsigned long *)vmalloc(TOTAL_PAGE_NUM * PAGE_SIZE);    
-	buffer_iterator = 0;
+	allocate_shared_mem_buffer();
 	init_cdev();
 
 	// create cache for slab allocator
@@ -399,7 +402,7 @@ int __init mp3_init(void)
 
     measure_info_obj = NULL;
 
-	printk(KERN_ALERT "MP3 MODULE LOADED\n");
+	printk(KERN_INFO "MP3 MODULE LOADED\n");
     return 0;
 }
 
@@ -410,7 +413,7 @@ void __exit mp3_exit(void)
     struct list_head *next;
 
     #ifdef DEBUG
-    printk(KERN_ALERT "MP3 MODULE UNLOADING\n");
+    printk(KERN_INFO "MP3 MODULE UNLOADING\n");
     #endif
 
     // remove every node on linked list and remove the list     
@@ -429,7 +432,7 @@ void __exit mp3_exit(void)
 	// destroy memory cache
 	kmem_cache_destroy(task_cache);
 
-    printk(KERN_ALERT "MP3 MODULE UNLOADED\n");
+    printk(KERN_INFO "MP3 MODULE UNLOADED\n");
 }
 
 // Register init and exit funtions
