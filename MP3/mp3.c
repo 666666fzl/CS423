@@ -340,16 +340,17 @@ static int cdev_mmap(struct file *f, struct vm_area_struct *vma)
 	unsigned long *vmalloc_area_ptr = shared_mem_buffer;
 	unsigned long start = vma->vm_start;
     unsigned long pfn;
+    struct page *page; 
 	while (length > 0) {
 		pfn = vmalloc_to_pfn(vmalloc_area_ptr);
-		struct page * page = pfn_to_page(pfn);
+		page = pfn_to_page(pfn);
 
         // set PG_reserved for each page in order to disable management 
         // of allocated pages by the virtual memory system
 		set_bit(PG_reserved, &(page->flags));
 		remap_pfn_range(vma, start, pfn, PAGE_SIZE, PAGE_SHARED);
 		start += PAGE_SIZE;
-		vmalloc_area_ptr += PAGE_SIZE;///(sizeof (unsigned long));
+		vmalloc_area_ptr += PAGE_SIZE;//(sizeof (unsigned long));
 		length -= PAGE_SIZE;
 	}
 	return 0;
