@@ -94,12 +94,13 @@ void write_process_to_shared_mem_buffer(void)
 	}
 	mutex_unlock(&my_mutex);
 
-	shared_mem_buffer[buffer_iterator++] = jiffies;
-	shared_mem_buffer[buffer_iterator++] = min_flt_count;
-	shared_mem_buffer[buffer_iterator++] = maj_flt_count;
-	shared_mem_buffer[buffer_iterator++] = cpu_utilization_count;
+	shared_mem_buffer[buffer_iterator] = jiffies;
+	shared_mem_buffer[buffer_iterator+1] = min_flt_count;
+	shared_mem_buffer[buffer_iterator+2] = maj_flt_count;
+	shared_mem_buffer[buffer_iterator+3] = cpu_utilization_count;
 
-	buffer_iterator = buffer_iterator % (TOTAL_PAGE_NUM*PAGE_SIZE/(sizeof (unsigned long)));
+    if (buffer_iterator + 4 > TOTAL_PAGE_NUM*PAGE_SIZE/(sizeof (unsigned long)) )
+	   buffer_iterator = 0; //% (TOTAL_PAGE_NUM*PAGE_SIZE/(sizeof (unsigned long)));
 }
 
 static void _measure_info_worker(struct work_struct * measure_into_obj)
