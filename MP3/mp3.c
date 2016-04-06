@@ -120,7 +120,7 @@ static void _measure_info_worker(struct work_struct * measure_into_obj)
 void _delayed_workqueue_init(void)
 {
     // Alloc a new work queue job if the current new process is the first one in the PCB list
-    if(list_empty(&taskList))
+    if(measure_info_obj == NULL)
     {
         measure_info_obj = (struct delayed_work *)kmalloc(sizeof(struct delayed_work), GFP_ATOMIC);
     }
@@ -223,6 +223,8 @@ static struct list_head *find_task_node_by_pid(char *pid)
         }
     }
 
+    printk(KERN_ALERT "2\n");
+
     mutex_unlock(&my_mutex);
     return NULL;
 }
@@ -230,8 +232,10 @@ static struct list_head *find_task_node_by_pid(char *pid)
 // Register function
 // Add the new process to the PCB linked list, and creates a work queue job if it is the first one
 static int reg(char *buf){
-    _delayed_workqueue_init();
-    return add_to_list(buf);
+    int ret;
+    ret = add_to_list(buf);
+    _delayed_workqueue_init(buf);
+    return ret;
 }
 
 // Unregister function
@@ -291,13 +295,13 @@ static const struct file_operations mp3_file = {
 
 static int cdev_open(struct inode * id, struct file *f)
 {
-	printk(KERN_ALERT "char dev open\n");
+	printk(KERN_ALERT "CHAR DEV OPEN\n");
 	return 0;
 }
 
 static int cdev_release(struct inode * id, struct file *f)
 {
-	printk(KERN_ALERT "char dev release\n");
+	printk(KERN_ALERT "CHAR DEV RELEASED\n");
 	return 0;
 }
 
@@ -357,6 +361,8 @@ int __init mp3_init(void)
 
     // init mutex lock
     mutex_init(&my_mutex);
+
+    measure_info_obj = NULL;
 
 	printk(KERN_ALERT "MP3 MODULE LOADED\n");
     return 0;
