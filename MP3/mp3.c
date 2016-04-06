@@ -213,7 +213,7 @@ static struct list_head *find_task_node_by_pid(char *pid)
     list_for_each_safe(pos, next, &taskList){
         curr = list_entry(pos, task_node_t, process_node);
         
-		printk(KERN_ALERT "%u\n", curr_pid);
+		printk(KERN_ALERT "%s\n", curr_pid);
 		memset(curr_pid, 0, 20);
         sprintf(curr_pid, "%u", curr->pid);
         if(strcmp(curr_pid, pid)==0)
@@ -234,7 +234,7 @@ static struct list_head *find_task_node_by_pid(char *pid)
 static int reg(char *buf){
     int ret;
     ret = add_to_list(buf);
-    _delayed_workqueue_init(buf);
+    _delayed_workqueue_init();
     return ret;
 }
 
