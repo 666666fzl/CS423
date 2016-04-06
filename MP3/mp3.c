@@ -193,7 +193,7 @@ static void destruct_node(struct list_head *pos)
 	mutex_lock(&my_mutex);
 	entry = list_entry(pos, task_node_t, process_node);
 	printk(KERN_ALERT "START DESTRUCT TASK: %u",entry->pid);
-
+	list_del(pos);
 	kmem_cache_free(task_cache, entry);
 	mutex_unlock(&my_mutex);
 }
@@ -209,16 +209,17 @@ static struct list_head *find_task_node_by_pid(char *pid)
 
     mutex_lock(&my_mutex);
 	printk(KERN_ALERT "1\n");
-
+	printk(KERN_ALERT "%s\n", pid);
     list_for_each_safe(pos, next, &taskList){
         curr = list_entry(pos, task_node_t, process_node);
         
-		printk(KERN_ALERT "%s\n", curr_pid);
 		memset(curr_pid, 0, 20);
-        sprintf(curr_pid, "%u", curr->pid);
+        sprintf(curr_pid, "%u\n", curr->pid);
+		printk(KERN_ALERT "%s\n", curr_pid);
         if(strcmp(curr_pid, pid)==0)
         {
-            mutex_unlock(&my_mutex);
+        	printk(KERN_ALERT "here!\n");
+		    mutex_unlock(&my_mutex);
             return pos;
         }
     }
@@ -238,18 +239,34 @@ static int reg(char *buf){
     return ret;
 }
 
+static void delete_workqueue(void){
+	if(delayed_workqueue)
+	{
+		if(measure_info_obj)
+		{
+			cancel_delayed_work(measure_info_obj);
+			kfree(measure_info_obj);
+			measure_info_obj = NULL;
+		}
+		flush_workqueue(delayed_workqueue);
+		destroy_workqueue(delayed_workqueue);
+		delayed_workqueue = NULL;
+	}
+
+}
+
 // Unregister function
 // Delete the requesting process from PCB list
 static void unreg(char *buf){
     struct list_head *pos;
     pos = find_task_node_by_pid(buf);
     destruct_node(pos);
+	printk(KERN_ALERT "HAHA wo hu han san you hui lai le\n");
 
     //if the PCB list is empty, delete the work queue
     if(list_empty(&taskList))
     {
-        kfree(measure_info_obj);
-        measure_info_obj = NULL;
+		delete_workqueue();
     }
 }
 
@@ -258,7 +275,8 @@ static void unreg(char *buf){
 static ssize_t mp3_write(struct file *file, const char __user *buffer, size_t count, loff_t * data){
 	char * buf = (char*)kmalloc(count+1, GFP_KERNEL);
 	int ret = -1;
-    
+   
+	memset(buf, 0, count+1); 
 	if (count > MAX_BUF_SIZE - 1) {
 		count = MAX_BUF_SIZE - 1;
 	}
@@ -276,6 +294,7 @@ static ssize_t mp3_write(struct file *file, const char __user *buffer, size_t co
 	}
 	else if (buf[0] == 'U') {
 	// 2.unregister: U PID
+		printk(KERN_ALERT "UNREGISTERING PID: %s", buf+2);
         unreg(buf+2);
 		printk(KERN_ALERT "UNREGISTERED PID: %s", buf+2);
 	}
@@ -387,9 +406,8 @@ void __exit mp3_exit(void)
     remove_proc_entry(FILENAME, proc_dir);
     remove_proc_entry(DIRECTORY, NULL);
 
-    flush_workqueue(delayed_workqueue);
-    destroy_workqueue(delayed_workqueue);
-   
+    delete_workqueue();
+
     vfree(shared_mem_buffer);
 
 	// destroy memory cache
