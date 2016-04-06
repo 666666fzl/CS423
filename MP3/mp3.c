@@ -332,7 +332,6 @@ static int cdev_mmap(struct file *f, struct vm_area_struct *vma)
 	unsigned long *vmalloc_area_ptr = shared_mem_buffer;
 	unsigned long start = vma->vm_start;
     unsigned long pfn;
-    struct page *page; 
 	while (length > 0) {
 		pfn = vmalloc_to_pfn(vmalloc_area_ptr);
 	    remap_pfn_range(vma, start, pfn, PAGE_SIZE, vma->vm_page_prot);
@@ -369,7 +368,6 @@ void allocate_shared_mem_buffer(void)
     buffer_iterator = 0;
 
     while (i < TOTAL_PAGE_NUM * PAGE_SIZE) {
-        (void*)(((unsigned long)vmalloc_buffer)+ i))
         SetPageReserved(vmalloc_to_page((void *)(((unsigned long)(shared_mem_buffer)) + i)));
         i += PAGE_SIZE;
     }
