@@ -350,7 +350,7 @@ static int cdev_mmap(struct file *f, struct vm_area_struct *vma)
 		set_bit(PG_reserved, &(page->flags));
 		remap_pfn_range(vma, start, pfn, PAGE_SIZE, PAGE_SHARED);
 		start += PAGE_SIZE;
-		vmalloc_area_ptr += PAGE_SIZE;//(sizeof (unsigned long));
+		vmalloc_area_ptr += PAGE_SIZE/(sizeof (unsigned long));
 		length -= PAGE_SIZE;
 	}
 	return 0;
