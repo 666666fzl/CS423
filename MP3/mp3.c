@@ -54,7 +54,7 @@ static struct kmem_cache *task_cache;
 static struct workqueue_struct * delayed_workqueue;
 struct delayed_work *measure_info_obj;
 unsigned long * shared_mem_buffer;
-unsigned int buffer_iterator;
+int buffer_iterator;
 static struct cdev *my_cdev;
 static dev_t my_cdev_num;
 
@@ -99,9 +99,14 @@ void write_process_to_shared_mem_buffer(void)
 	shared_mem_buffer[buffer_iterator+2] = maj_flt_count;
 	shared_mem_buffer[buffer_iterator+3] = cpu_utilization_count;
 
-    printk(KERN_ALERT "jiffies:%lu\nminflt:%lu\nmajflt:%lu\ncpu:%lu\n", jiffies, min_flt_count, maj_flt_count, cpu_utilization_count);
+    printk(KERN_ALERT "jiffies:%lu\nminflt:%lu\nmajflt:%lu\ncpu:%lu\n", shared_mem_buffer[buffer_iterator], shared_mem_buffer[buffer_iterator+1], shared_mem_buffer[buffer_iterator+2], shared_mem_buffer[buffer_iterator+3]);
+    printk(KERN_ALERT "%ld\n", TOTAL_PAGE_NUM*PAGE_SIZE/(sizeof (unsigned long)));
+	// update buffer_iterator
+	buffer_iterator += 4;
 
-    if (buffer_iterator + 4 > TOTAL_PAGE_NUM*PAGE_SIZE/(sizeof (unsigned long)))
+
+	// if the rest memory space cannot handle the next iteration
+    if (buffer_iterator + 4 >= TOTAL_PAGE_NUM*PAGE_SIZE/(sizeof (unsigned long)))
 	   buffer_iterator = 0; //% (TOTAL_PAGE_NUM*PAGE_SIZE/(sizeof (unsigned long)));
 }
 
@@ -203,10 +208,13 @@ static struct list_head *find_task_node_by_pid(char *pid)
     char curr_pid[20];
 
     mutex_lock(&my_mutex);
+	printk(KERN_ALERT "1\n");
 
     list_for_each_safe(pos, next, &taskList){
         curr = list_entry(pos, task_node_t, process_node);
-        memset(curr_pid, 0, 20);
+        
+		printk(KERN_ALERT "%u\n", curr_pid);
+		memset(curr_pid, 0, 20);
         sprintf(curr_pid, "%u", curr->pid);
         if(strcmp(curr_pid, pid)==0)
         {
@@ -300,6 +308,8 @@ static int cdev_mmap(struct file *f, struct vm_area_struct *vma)
 	unsigned long start = vma->vm_start;
 	while (length > 0) {
 		unsigned long pfn = vmalloc_to_pfn(vmalloc_area_ptr);
+		struct page * page = pfn_to_page(pfn);
+		set_bit(PG_reserved, &(page->flags));
 		remap_pfn_range(vma, start, pfn, PAGE_SIZE, vma->vm_page_prot);
 		start += PAGE_SIZE;
 		vmalloc_area_ptr += PAGE_SIZE/(sizeof (unsigned long));
