@@ -11,8 +11,6 @@
 #include <linux/mutex.h>
 #include <linux/sched.h>
 #include <linux/string.h>
-#include <linux/kthread.h>
-#include <linux/spinlock.h>
 #include <linux/fs.h>
 #include <linux/cdev.h>
 #include <linux/workqueue.h>
@@ -34,14 +32,18 @@ MODULE_DESCRIPTION("CS-423 MP3");
 
 static void _measure_info_worker(struct work_struct *);
 void _delayed_workqueue_init(void);
+
 // A self-defined structure represents PCB
-// Index by pid, used as a node in the task linked list
+// Indexed by pid, used as a node in the task linked list
 typedef struct mp3_task_struct {
 	struct task_struct* linux_task;
 	pid_t pid;
     struct list_head process_node;
+    // minor fault count
     unsigned long min_flt;
+    // major fault count
     unsigned long maj_flt;
+    // process utilization
     unsigned long cpu_utilization;	
 } task_node_t;
 
@@ -109,6 +111,7 @@ static void _measure_info_worker(struct work_struct * measure_into_obj)
 
 void _delayed_workqueue_init(void)
 {
+    // Alloc a new work queue job if the current new process is the first one in the PCB list
     if(list_empty(&taskList))
     {
         measure_info_obj = (struct delayed_work *)kmalloc(sizeof(struct delayed_work), GFP_ATOMIC);
@@ -117,7 +120,6 @@ void _delayed_workqueue_init(void)
     queue_delayed_work(delayed_workqueue, measure_info_obj, msecs_to_jiffies(50));
 }
 
-// 3.unregister: D,PID
 // Called when user application use "cat" or "fopen"
 // The function read the status file and print the information related out
 static ssize_t mp3_read(struct file *file, char __user * buffer, size_t count, loff_t * data)
@@ -153,9 +155,8 @@ static ssize_t mp3_read(struct file *file, char __user * buffer, size_t count, l
 	
 }
 
-
 // Called when a new self-defined task node is allocated
-// Store user input, set task state and create timer for it
+// Obtain the task_struct for the newly created node
 static void init_node(task_node_t* new_task, char* buf) 
 {
     // set up member variables
@@ -164,7 +165,6 @@ static void init_node(task_node_t* new_task, char* buf)
 }
 
 // Add a newly created task node into the existing task linked list
-// Ordered bt task period (shortest period first)
 static int add_to_list(char *buf)
 {
 	task_node_t *new_task = kmem_cache_alloc(task_cache, GFP_KERNEL);
@@ -186,8 +186,6 @@ static void destruct_node(struct list_head *pos)
 	entry = list_entry(pos, task_node_t, process_node);
 	printk(KERN_ALERT "START DESTRUCT TASK: %u",entry->pid);
 
-    // if the current running task would like to unregister itself,
-    // set current_running_task to NULL
 	kmem_cache_free(task_cache, entry);
 	mutex_unlock(&my_mutex);
 }
@@ -218,12 +216,16 @@ static struct list_head *find_task_node_by_pid(char *pid)
     return NULL;
 }
 
+// Register function
+// Add the new process to the PCB linked list, and creates a work queue job if it is the first one
 static int reg(char *buf){
     _delayed_workqueue_init();
     return add_to_list(buf);
 }
 
-static void dereg(char *buf){
+// Unregister function
+// Delete the requesting process from PCB list
+static void unreg(char *buf){
     struct list_head *pos;
     pos = find_task_node_by_pid(buf);
     destruct_node(pos);
@@ -236,8 +238,8 @@ static void dereg(char *buf){
     }
 }
 
-// Called when user application registered a process
-// The function get the pid from the user and add/remove it on/from the linked list
+// The write callback function, called when user application registering a process
+// The function gets the pid from the user and add/remove it on/from the linked list
 static ssize_t mp3_write(struct file *file, const char __user *buffer, size_t count, loff_t * data){
 	char * buf = (char*)kmalloc(count+1, GFP_KERNEL);
 	int ret = -1;
@@ -251,7 +253,7 @@ static ssize_t mp3_write(struct file *file, const char __user *buffer, size_t co
 
 	printk(KERN_ALERT "MP3_WRITE CALLED, INPUT:%s\n", buf);
 	
-	// Check the starting char of buf, if:
+	// Check the starting char of buf:
 	// 1.register: R PID
 	if (buf[0] == 'R') {
 		ret = reg(buf+2);
@@ -259,7 +261,7 @@ static ssize_t mp3_write(struct file *file, const char __user *buffer, size_t co
 	}
 	else if (buf[0] == 'U') {
 	// 2.unregister: U PID
-        dereg(buf+2);
+        unreg(buf+2);
 		printk(KERN_ALERT "UNREGISTERED PID: %s", buf+2);
 	}
 	else {
@@ -318,7 +320,7 @@ void init_cdev(void)
 	cdev_add(my_cdev, my_cdev_num, 1);
 }
 
-// mp3_init - Called when module is loaded
+// mp3_init - Called when the module is loaded
 int __init mp3_init(void)
 {
     #ifdef DEBUG
@@ -347,7 +349,7 @@ int __init mp3_init(void)
     return 0;
 }
 
-// mp3_exit - Called when module is unloaded
+// mp3_exit - Called when the module is unloaded
 void __exit mp3_exit(void)
 {
     struct list_head *pos;
