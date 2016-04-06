@@ -1,8 +1,6 @@
 #include <stdio.h>
 #include <sys/syscall.h>
 #include <unistd.h>
-#include <stdio.h>
-#include <unistd.h>
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -70,8 +68,15 @@ int main(int argc, char* argv[])
 
   // 1. Register itself to the MP3 kernel module for profiling.
   mypid = syscall(__NR_gettid);
-  sprintf(cmd, "echo 'R %u'>//proc/mp3/status", mypid);
-  system(cmd);
+  //sprintf(cmd, "echo 'R %u'>//proc/mp3/status", mypid);
+  //system(cmd);
+  FILE * fp = fopen ('/proc/mp3/status', "a+");
+  if(!fp)
+  {   
+    perror ("file doesn't exist\n");
+    return -1; 
+  }   
+  fprintf(fp, "R %u", mypid);
 
   // 2. Allocate memory blocks
   for(i=0; i<msize; i++){
@@ -113,7 +118,10 @@ int main(int argc, char* argv[])
   }
 
   // 5. Unregister itself to stop the profiling
-  sprintf(cmd, "echo 'U %u'>//proc/mp3/status", mypid);
-  system(cmd);
+  //sprintf(cmd, "echo 'U %u'>//proc/mp3/status", mypid);
+  //system(cmd);
+  fprintf(fp, "U %u", mypid);
+  fclose(fp);
+
 }
 
