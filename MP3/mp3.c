@@ -99,7 +99,7 @@ void write_process_to_shared_mem_buffer(void)
 	shared_mem_buffer[buffer_iterator++] = maj_flt_count;
 	shared_mem_buffer[buffer_iterator++] = cpu_utilization_count;
 
-	buffer_iterator = (buffer_iterator+4) % (TOTAL_PAGE_NUM*PAGE_SIZE/(sizeof (unsigned long)));
+	buffer_iterator = buffer_iterator % (TOTAL_PAGE_NUM*PAGE_SIZE/(sizeof (unsigned long)));
 }
 
 static void _measure_info_worker(struct work_struct * measure_into_obj)
