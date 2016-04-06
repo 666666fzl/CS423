@@ -318,33 +318,38 @@ static const struct file_operations mp3_file = {
     .write = mp3_write,
 };
 
+// cdev open method
 static int cdev_open(struct inode * id, struct file *f)
 {
 	printk(KERN_ALERT "CHAR DEV OPEN\n");
 	return 0;
 }
 
+// cdev last close method
 static int cdev_release(struct inode * id, struct file *f)
 {
 	printk(KERN_ALERT "CHAR DEV RELEASED\n");
 	return 0;
 }
 
+// cdev mmap method, map each vmalloced space to device space,
+// so that it can be contiguous
 static int cdev_mmap(struct file *f, struct vm_area_struct *vma)
 {
 	unsigned long length = TOTAL_PAGE_NUM*PAGE_SIZE;
 	unsigned long *vmalloc_area_ptr = shared_mem_buffer;
 	unsigned long start = vma->vm_start;
+    unsigned long pfn;
 	while (length > 0) {
-		unsigned long pfn = vmalloc_to_pfn(vmalloc_area_ptr);
+		pfn = vmalloc_to_pfn(vmalloc_area_ptr);
 		struct page * page = pfn_to_page(pfn);
 
         // set PG_reserved for each page in order to disable management 
         // of allocated pages by the virtual memory system
 		set_bit(PG_reserved, &(page->flags));
-		remap_pfn_range(vma, start, pfn, PAGE_SIZE, vma->vm_page_prot);
+		remap_pfn_range(vma, start, pfn, PAGE_SIZE, PAGE_SHARED);
 		start += PAGE_SIZE;
-		vmalloc_area_ptr += PAGE_SIZE/(sizeof (unsigned long));
+		vmalloc_area_ptr += PAGE_SIZE;///(sizeof (unsigned long));
 		length -= PAGE_SIZE;
 	}
 	return 0;
@@ -357,6 +362,7 @@ static const struct file_operations cdev_ops = {
     .release = cdev_release
 };
 
+// Initialize the device structure and register the device with the kernel
 void init_cdev(void)
 {
 	alloc_chrdev_region(&my_cdev_num, 0, 1, "mp3_cdev");	
