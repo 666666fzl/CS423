@@ -336,7 +336,7 @@ static int cdev_mmap(struct file *f, struct vm_area_struct *vma)
 		pfn = vmalloc_to_pfn(vmalloc_area_ptr);
 	    remap_pfn_range(vma, start, pfn, PAGE_SIZE, vma->vm_page_prot);
 		start += PAGE_SIZE;
-		vmalloc_area_ptr += PAGE_SIZE/(sizeof (unsigned long));
+		vmalloc_area_ptr += PAGE_SIZE;//(sizeof (unsigned long));
 		length -= PAGE_SIZE;
 	}
     printk(KERN_INFO "CDEV MMAP DONE");
