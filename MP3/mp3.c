@@ -99,7 +99,9 @@ void write_process_to_shared_mem_buffer(void)
 	shared_mem_buffer[buffer_iterator+2] = maj_flt_count;
 	shared_mem_buffer[buffer_iterator+3] = cpu_utilization_count;
 
-    if (buffer_iterator + 4 > TOTAL_PAGE_NUM*PAGE_SIZE/(sizeof (unsigned long)) )
+    printk(KERN_ALERT "jiffies:%lu\nminflt:%lu\nmajflt:%lu\ncpu:%lu\n", jiffies, ,min_flt_count, maj_flt_count, cpu_utilization_count);
+
+    if (buffer_iterator + 4 > TOTAL_PAGE_NUM*PAGE_SIZE/(sizeof (unsigned long)))
 	   buffer_iterator = 0; //% (TOTAL_PAGE_NUM*PAGE_SIZE/(sizeof (unsigned long)));
 }
 
