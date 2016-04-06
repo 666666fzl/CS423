@@ -60,6 +60,8 @@ static dev_t my_cdev_num;
 
 LIST_HEAD(taskList);
 
+// Get the (a)jiffies value (b) minor fault count, (c) major fault count
+// and (d) CPU utilization for all existing task
 void update_process_info(void)
 {
     task_node_t *entry;
@@ -75,6 +77,7 @@ void update_process_info(void)
     mutex_unlock(&my_mutex);
 }
 
+// Calculate and save the measured information to the memory buffer 
 void write_process_to_shared_mem_buffer(void)
 {
     task_node_t *entry;
@@ -86,6 +89,7 @@ void write_process_to_shared_mem_buffer(void)
 	cpu_utilization_count = 0;
     
     mutex_lock(&my_mutex);
+    // calculate major fault count, minor fault count and CPT utilization
     list_for_each(pos, &taskList) {
 		entry = list_entry(pos, task_node_t, process_node);
         maj_flt_count += entry->maj_flt;
@@ -94,6 +98,7 @@ void write_process_to_shared_mem_buffer(void)
 	}
 	mutex_unlock(&my_mutex);
 
+    // save the information to the memory buffer
 	shared_mem_buffer[buffer_iterator] = jiffies;
 	shared_mem_buffer[buffer_iterator+1] = min_flt_count;
 	shared_mem_buffer[buffer_iterator+2] = maj_flt_count;
@@ -104,10 +109,10 @@ void write_process_to_shared_mem_buffer(void)
 	// update buffer_iterator
 	buffer_iterator += 4;
 
-
 	// if the rest memory space cannot handle the next iteration
-    if (buffer_iterator + 4 >= TOTAL_PAGE_NUM*PAGE_SIZE/(sizeof (unsigned long)))
-	   buffer_iterator = 0; //% (TOTAL_PAGE_NUM*PAGE_SIZE/(sizeof (unsigned long)));
+    if (buffer_iterator + 4 >= TOTAL_PAGE_NUM*PAGE_SIZE/(sizeof (unsigned long))) {
+        buffer_iterator = 0;
+    }
 }
 
 static void _measure_info_worker(struct work_struct * measure_into_obj)
@@ -117,6 +122,7 @@ static void _measure_info_worker(struct work_struct * measure_into_obj)
     _delayed_workqueue_init();
 }
 
+// Intialize the workqueue, malloc a new work queue job if it is NULL
 void _delayed_workqueue_init(void)
 {
     // Alloc a new work queue job if the current new process is the first one in the PCB list
@@ -332,6 +338,9 @@ static int cdev_mmap(struct file *f, struct vm_area_struct *vma)
 	while (length > 0) {
 		unsigned long pfn = vmalloc_to_pfn(vmalloc_area_ptr);
 		struct page * page = pfn_to_page(pfn);
+
+        // set PG_reserved for each page in order to disable management 
+        // of allocated pages by the virtual memory system
 		set_bit(PG_reserved, &(page->flags));
 		remap_pfn_range(vma, start, pfn, PAGE_SIZE, vma->vm_page_prot);
 		start += PAGE_SIZE;
