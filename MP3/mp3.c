@@ -25,9 +25,6 @@ MODULE_DESCRIPTION("CS-423 MP3");
 #define FILENAME "status"
 #define DIRECTORY "mp3"
 #define MAX_BUF_SIZE 128
-#define SLEEPING_STATE 0
-#define READY_STATE 1
-#define RUNNING_STATE 2
 #define TOTAL_PAGE_NUM 128
 
 static void _measure_info_worker(struct work_struct *);
