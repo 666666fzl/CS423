@@ -332,16 +332,27 @@ static int cdev_mmap(struct file *f, struct vm_area_struct *vma)
 	unsigned long *vmalloc_area_ptr = shared_mem_buffer;
 	unsigned long start = vma->vm_start;
     unsigned long pfn;
+	int ret;
+	int i=0;
+	printk(KERN_INFO "CDEV MMAP STARTED");
+
+	if (length > TOTAL_PAGE_NUM * PAGE_SIZE) {
+		printk(KERN_INFO "LENGTH EXCEEDED");
+		return -EIO;
+	}
+
 	while (length > 0) {
-		pfn = vmalloc_to_pfn((void *)((unsigned long)vmalloc_area_ptr));
-	    if (remap_pfn_range(vma, start, pfn, PAGE_SIZE, vma->vm_page_prot) < 0) {
+		pfn = vmalloc_to_pfn((void *)vmalloc_area_ptr);
+	    if ((ret = remap_pfn_range(vma, start, pfn, PAGE_SIZE, vma->vm_page_prot)) < 0) {
             printk(KERN_INFO "CDEV MMAP FAILED");
-            return -1;
+            return ret;
         }
 		start += PAGE_SIZE;
-		vmalloc_area_ptr += PAGE_SIZE;//(sizeof (unsigned long));
+		vmalloc_area_ptr += PAGE_SIZE/(sizeof (unsigned long));
 		length -= PAGE_SIZE;
+		i ++;
 	}
+	printk(KERN_ALERT "totally %d pages mapped", i);
     printk(KERN_INFO "CDEV MMAP DONE");
 	return 0;
 }
@@ -366,12 +377,13 @@ void init_cdev(void)
 // set pg_reserved for each page allocated
 void allocate_shared_mem_buffer(void)
 {
-    unsigned int i = 0;
+    int i = 0;
     shared_mem_buffer = (unsigned long *)vmalloc(TOTAL_PAGE_NUM * PAGE_SIZE);    
     buffer_iterator = 0;
+	memset((void*)shared_mem_buffer, -1, TOTAL_PAGE_NUM*PAGE_SIZE);
 
     while (i < TOTAL_PAGE_NUM * PAGE_SIZE) {
-        SetPageReserved(vmalloc_to_page((void *)(((unsigned long)(shared_mem_buffer)) + i)));
+        SetPageReserved(vmalloc_to_page((void *)(((unsigned long)shared_mem_buffer) + i)));
         i += PAGE_SIZE;
     }
     
@@ -412,23 +424,32 @@ void __exit mp3_exit(void)
 {
     struct list_head *pos;
     struct list_head *next;
-
+	int i = 0;
     #ifdef DEBUG
     printk(KERN_INFO "MP3 MODULE UNLOADING\n");
     #endif
-
-    // remove every node on linked list and remove the list     
-    list_for_each_safe(pos, next, &taskList){
-		destruct_node(pos);
-	}
-
-    // remove file entry and repository  
+	
+	unregister_chrdev_region(my_cdev_num, 1);
+	cdev_del(my_cdev);
+    
+    while (i < TOTAL_PAGE_NUM * PAGE_SIZE) {
+        ClearPageReserved(vmalloc_to_page((void *)(((unsigned long)shared_mem_buffer) + i)));
+        i += PAGE_SIZE;
+    }
+     // remove file entry and repository  
     remove_proc_entry(FILENAME, proc_dir);
     remove_proc_entry(DIRECTORY, NULL);
 
     delete_workqueue();
-
+ 	
+    
     vfree(shared_mem_buffer);
+	
+	// remove every node on linked list and remove the list     
+    list_for_each_safe(pos, next, &taskList){
+		destruct_node(pos);
+	}
+
 
 	// destroy memory cache
 	kmem_cache_destroy(task_cache);
