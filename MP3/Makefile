@@ -21,4 +21,4 @@ work: work.c
 	$(GCC) -o work work.c
 
 clean:
-	$(RM) -f userapp *~ *.ko *.o *.mod.c Module.symvers modules.order
+	$(RM) -f work monitor *~ *.ko *.o *.mod.c Module.symvers modules.order
