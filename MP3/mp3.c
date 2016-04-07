@@ -256,7 +256,6 @@ static void unreg(char *buf){
     struct list_head *pos;
     pos = find_task_node_by_pid(buf);
     destruct_node(pos);
-	printk(KERN_INFO "HAHA wo hu han san you hui lai le\n");
 
     //if the PCB list is empty, delete the work queue
     if(list_empty(&taskList))
