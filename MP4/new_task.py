@@ -4,7 +4,9 @@ import sys
 import time
 import threading
 import pickle
+import argparse
 from job import Job
+from hardware_monitor import HardwareMonitor
 
 LOCAL_IP = '172.22.146.196'
 REMOTE_IP = '172.22.146.245'
@@ -76,7 +78,7 @@ def calculateTask(task):
 	task.compute()
 
 
-def sendState():
+def sendState(message):
 	connection = pika.BlockingConnection(pika.ConnectionParameters(
 	        host=REMOTE_IP))
 	channel = connection.channel()
@@ -98,8 +100,6 @@ def receiveState():
 	connection = pika.BlockingConnection(pika.ConnectionParameters(
 	        host=LOCAL_IP))
 	channel = connection.channel()
-
-
 
 	channel.queue_declare(queue=STATE_SOURCE, durable=True)
 	print(' [STATE] Waiting for state. To exit press CTRL+C')
@@ -128,8 +128,23 @@ def adaptor():
 			numTransfer -= 1
 		sendTask(taskArr)
 
+class SystemState:
+	def __init__(self, job_queue, hardware_monitor):
+		self.num_job = job_queue.method.message_count
+		self.throttling = hardware_monitor.get_throttling
+		self.cpu_use = hardware_monitor.get_cpu_info  
+
+def state_manager(hardware_monitor):
+	# peiodic policy
+	while True:
+		state = SystemState(hardware_monitor)
+		statestr = pickle.dumps(state)
+		sendState(statestr)
+		time.sleep(1)
 
 def main(argv):
+	throttling = 1 #TODO
+	hardware_monitor = HardwareMonitor(throttling)
 	global STATE_DESTINATION, STATE_SOURCE, TASK_DESTINATION, TASK_SOURCE, REMOTE_IP, LOCAL_IP
 	isLocal = sys.argv[1]
 	if isLocal == 'true':
@@ -139,11 +154,14 @@ def main(argv):
 
 	taskReceivingThread = threading.Thread(target=receiveTask)
 	stateReceivingThread = threading.Thread(target=receiveState)
+	stateManagerThread = threading.Thread(target=state_manager, args=(hardware_monitor,))
 	taskReceivingThread.start()
 	stateReceivingThread.start()
+	stateManagerThread.start()
 	taskReceivingThread.join()
 	stateReceivingThread.join()
-
+	stateManagerThread.join()
+	
 	
 if __name__ == "__main__":
     main(sys.argv)
