@@ -6,8 +6,8 @@ import threading
 import pickle
 from job import Job
 
-REMOTE_IP = '172.22.146.196'
-LOCAL_IP = '172.22.146.245'
+LOCAL_IP = '172.22.146.196'
+REMOTE_IP = '172.22.146.245'
 QUEUE_THRESHOLD = 400
 MY_TASK_QUEUE = None 
 TASK_CONNECTION = None
@@ -34,13 +34,13 @@ STATE_SOURCE = 'remote_state_queue'
 
 def sendTask(task):
 	connection = pika.BlockingConnection(pika.ConnectionParameters(
-	        host=LOCAL_IP))
+	        host=REMOTE_IP))
 	channel = connection.channel()
 
 	channel.queue_declare(queue=TASK_DESTINATION, durable=True)
 	wow = {'Name': 'Zara', 'Age': 7, 'Class': 'First'};
 	sendable = pickle.dumps(wow)
-	message = ' '.join(sys.argv[1:]) or sendable
+	message = sendable
 	channel.basic_publish(exchange='',
 	                      routing_key=TASK_DESTINATION,
 	                      body=message,
@@ -52,7 +52,7 @@ def sendTask(task):
 
 def receiveTask():
 	connection = pika.BlockingConnection(pika.ConnectionParameters(
-	        host=REMOTE_IP))
+	        host=LOCAL_IP))
 	channel = connection.channel()
 
 	TASK_CONNECTION = connection
@@ -68,6 +68,7 @@ def receiveTask():
 
 def receiveTaskCallback(ch, method, properties, body):
 	task = pickle.loads(body)
+	print(task)
 	taskReceivingThread = threading.Thread(target=calculateTask, args=(task,))
 	ch.basic_ack(delivery_tag = method.delivery_tag)
 
@@ -77,7 +78,7 @@ def calculateTask(task):
 
 def sendState():
 	connection = pika.BlockingConnection(pika.ConnectionParameters(
-	        host=LOCAL_IP))
+	        host=REMOTE_IP))
 	channel = connection.channel()
 
 	channel.queue_declare(queue=STATE_DESTINATION, durable=True)
@@ -95,7 +96,7 @@ def sendState():
 
 def receiveState():
 	connection = pika.BlockingConnection(pika.ConnectionParameters(
-	        host=REMOTE_IP))
+	        host=LOCAL_IP))
 	channel = connection.channel()
 
 
@@ -128,17 +129,18 @@ def adaptor():
 		sendTask(taskArr)
 
 
-def main(sys.argv):
+def main(argv):
+	global STATE_DESTINATION, STATE_SOURCE, TASK_DESTINATION, TASK_SOURCE, REMOTE_IP, LOCAL_IP
 	isLocal = sys.argv[1]
-	if isLocal:
-		TASK_DESTINATION, TASK_SOURCE = TASK_SOURCE, TASK_DESTINATION
+	if isLocal == 'true':
 		STATE_DESTINATION, STATE_SOURCE = STATE_SOURCE, STATE_DESTINATION
+		TASK_DESTINATION, TASK_SOURCE = TASK_SOURCE, TASK_DESTINATION
+		REMOTE_IP, LOCAL_IP = LOCAL_IP, REMOTE_IP
 
 	taskReceivingThread = threading.Thread(target=receiveTask)
 	stateReceivingThread = threading.Thread(target=receiveState)
 	taskReceivingThread.start()
 	stateReceivingThread.start()
-	sendTask(None)
 	taskReceivingThread.join()
 	stateReceivingThread.join()
 
