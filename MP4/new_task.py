@@ -4,9 +4,16 @@ import sys
 import time
 import threading
 import pickle
+from job import Job
 
 REMOTE_IP = '172.22.146.196'
 LOCAL_IP = '172.22.146.245'
+QUEUE_THRESHOLD = 400
+MY_TASK_QUEUE = None 
+TASK_CONNECTION = None
+TASK_CHANNEL = None
+TASK_THREADS = []
+THROTTLING = 1
 
 # class myThread (threading.Thread):
 # 	def __init__(self, threadID, name, counter):
@@ -21,7 +28,7 @@ LOCAL_IP = '172.22.146.245'
 # 		print "Exiting " + self.name
 
 
-def sendTask():
+def sendTask(task):
 	connection = pika.BlockingConnection(pika.ConnectionParameters(
 	        host=LOCAL_IP))
 	channel = connection.channel()
@@ -44,7 +51,10 @@ def receiveTask():
 	        host=REMOTE_IP))
 	channel = connection.channel()
 
-	channel.queue_declare(queue='remote_task_queue', durable=True)
+	TASK_CONNECTION = connection
+	TASK_CHANNEL = channel
+
+	MY_TASK_QUEUE = channel.queue_declare(queue='remote_task_queue', durable=True)
 	print(' [*] Waiting for messages. To exit press CTRL+C')
 
 	def callback(ch, method, properties, body):
@@ -85,24 +95,36 @@ def receiveTask():
 	channel.queue_declare(queue='remote_state_queue', durable=True)
 	print(' [*] Waiting for messages. To exit press CTRL+C')
 
-	def callback(ch, method, properties, body):
-		printable = pickle.loads(body)
-		print(" [x] Received %r" % printable)
-		time.sleep(body.count(b'.'))
-		print(" [x] Done")
-		ch.basic_ack(delivery_tag = method.delivery_tag)
-
 	channel.basic_qos(prefetch_count=1)
-	channel.basic_consume(callback,
+	channel.basic_consume(receiveTaskCallback,
 	                      queue='remote_state_queue')
 	channel.start_consuming()
+
+def receiveTaskCallback(ch, method, properties, body):
+	task = pickle.loads(body)
+	taskReceivingThread = threading.Thread(target=calculateTask, args=(task,))
+	ch.basic_ack(delivery_tag = method.delivery_tag)
+
+def calculateTask(task):
+	task.compute()
+
+def adaptor():
+	curLen = MY_TASK_QUEUE.method.message_count
+	if curLen > QUEUE_THRESHOLD:
+		numTransfer = curLen - QUEUE_THRESHOLD
+		taskArr = []
+		while numTransfer>0:
+			curTask = TASK_CHANNEL.basic_get(queue='remote_state_queue')
+			taskArr.append(curTask)
+			numTransfer -= 1
+		sendTask(taskArr)
+
 
 def main():
 	taskReceivingThread = threading.Thread(target=receiveTask)
 	stateReceivingThread = threading.Thread(target=receiveState)
 	taskReceivingThread.start()
 	stateReceivingThread.start()
-	sendTask()
 	taskReceivingThread.join()
 	stateReceivingThread.join()
 
