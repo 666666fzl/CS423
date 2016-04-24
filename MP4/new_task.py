@@ -143,8 +143,10 @@ def state_manager(hardware_monitor):
 		time.sleep(1)
 
 def main(argv):
-	throttling = 1 #TODO
-	hardware_monitor = HardwareMonitor(throttling)
+	parser = argparse.ArgumentParser()
+	parser.add_argument("throttling_value")
+	args = parser.parse_args()
+	hardware_monitor = HardwareMonitor(args.throttling_value)
 	global STATE_DESTINATION, STATE_SOURCE, TASK_DESTINATION, TASK_SOURCE, REMOTE_IP, LOCAL_IP
 	isLocal = sys.argv[1]
 	if isLocal == 'true':
@@ -161,7 +163,7 @@ def main(argv):
 	taskReceivingThread.join()
 	stateReceivingThread.join()
 	stateManagerThread.join()
-	
+
 	
 if __name__ == "__main__":
     main(sys.argv)
