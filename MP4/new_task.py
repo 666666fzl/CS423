@@ -1,4 +1,4 @@
-# remote
+# local
 import pika
 import sys
 import time
@@ -14,6 +14,10 @@ TASK_CONNECTION = None
 TASK_CHANNEL = None
 TASK_THREADS = []
 THROTTLING = 1
+TASK_DESTINATION = 'local_task_queue'
+TASK_SOURCE = 'remote_task_queue'
+STATE_DESTINATION = 'local_state_queue'
+STATE_SOURCE = 'remote_state_queue'
 
 # class myThread (threading.Thread):
 # 	def __init__(self, threadID, name, counter):
@@ -33,17 +37,17 @@ def sendTask(task):
 	        host=LOCAL_IP))
 	channel = connection.channel()
 
-	channel.queue_declare(queue='local_task_queue', durable=True)
+	channel.queue_declare(queue=TASK_DESTINATION, durable=True)
 	wow = {'Name': 'Zara', 'Age': 7, 'Class': 'First'};
 	sendable = pickle.dumps(wow)
 	message = ' '.join(sys.argv[1:]) or sendable
 	channel.basic_publish(exchange='',
-	                      routing_key='local_task_queue',
+	                      routing_key=TASK_DESTINATION,
 	                      body=message,
 	                      properties=pika.BasicProperties(
 	                         delivery_mode = 2, # make message persistent
 	                      ))
-	print(" [x] Sent %r" % message)
+	print(" [TASK] Sent %r" % message)
 	connection.close()
 
 def receiveTask():
@@ -54,50 +58,12 @@ def receiveTask():
 	TASK_CONNECTION = connection
 	TASK_CHANNEL = channel
 
-	MY_TASK_QUEUE = channel.queue_declare(queue='remote_task_queue', durable=True)
-	print(' [*] Waiting for messages. To exit press CTRL+C')
-
-	def callback(ch, method, properties, body):
-		printable = pickle.loads(body)
-		print(" [x] Received %r" % printable)
-		time.sleep(body.count(b'.'))
-		print(" [x] Done")
-		ch.basic_ack(delivery_tag = method.delivery_tag)
-
-	channel.basic_qos(prefetch_count=1)
-	channel.basic_consume(callback,
-	                      queue='remote_task_queue')
-	channel.start_consuming()
-
-def sendState():
-	connection = pika.BlockingConnection(pika.ConnectionParameters(
-	        host=LOCAL_IP))
-	channel = connection.channel()
-
-	channel.queue_declare(queue='local_state_queue', durable=True)
-
-	curState = _get_state_;
-
-	channel.basic_publish(exchange='',
-	                      routing_key='local_state_queue',
-	                      body=curState,
-	                      properties=pika.BasicProperties(
-	                         delivery_mode = 2, # make message persistent
-	                      ))
-	print(" [x] Sent %r" % message)
-	connection.close()
-
-def receiveTask():
-	connection = pika.BlockingConnection(pika.ConnectionParameters(
-	        host=REMOTE_IP))
-	channel = connection.channel()
-
-	channel.queue_declare(queue='remote_state_queue', durable=True)
-	print(' [*] Waiting for messages. To exit press CTRL+C')
+	MY_TASK_QUEUE = channel.queue_declare(queue=TASK_SOURCE, durable=True)
+	print(' [TASK] Waiting for messages. To exit press CTRL+C')
 
 	channel.basic_qos(prefetch_count=1)
 	channel.basic_consume(receiveTaskCallback,
-	                      queue='remote_state_queue')
+	                      queue=TASK_SOURCE)
 	channel.start_consuming()
 
 def receiveTaskCallback(ch, method, properties, body):
@@ -107,6 +73,48 @@ def receiveTaskCallback(ch, method, properties, body):
 
 def calculateTask(task):
 	task.compute()
+
+
+def sendState():
+	connection = pika.BlockingConnection(pika.ConnectionParameters(
+	        host=LOCAL_IP))
+	channel = connection.channel()
+
+	channel.queue_declare(queue=STATE_DESTINATION, durable=True)
+
+	curState = _get_state_;
+
+	channel.basic_publish(exchange='',
+	                      routing_key=STATE_DESTINATION,
+	                      body=curState,
+	                      properties=pika.BasicProperties(
+	                         delivery_mode = 2, # make message persistent
+	                      ))
+	print(" [x] Sent %r" % message)
+	connection.close()
+
+def receiveState():
+	connection = pika.BlockingConnection(pika.ConnectionParameters(
+	        host=REMOTE_IP))
+	channel = connection.channel()
+
+
+
+	channel.queue_declare(queue=STATE_SOURCE, durable=True)
+	print(' [STATE] Waiting for state. To exit press CTRL+C')
+
+	def callback(ch, method, properties, body):
+		printable = pickle.loads(body)
+		print(" [STATE] Received %r" % printable)
+		time.sleep(body.count(b'.'))
+		print(" [STATE] Done")
+		ch.basic_ack(delivery_tag = method.delivery_tag)
+
+	channel.basic_qos(prefetch_count=1)
+	channel.basic_consume(callback,
+	                      queue=STATE_SOURCE)
+	channel.start_consuming()
+
 
 def adaptor():
 	curLen = MY_TASK_QUEUE.method.message_count
@@ -120,14 +128,20 @@ def adaptor():
 		sendTask(taskArr)
 
 
-def main():
+def main(sys.argv):
+	isLocal = sys.argv[1]
+	if isLocal:
+		TASK_DESTINATION, TASK_SOURCE = TASK_SOURCE, TASK_DESTINATION
+		STATE_DESTINATION, STATE_SOURCE = STATE_SOURCE, STATE_DESTINATION
+
 	taskReceivingThread = threading.Thread(target=receiveTask)
 	stateReceivingThread = threading.Thread(target=receiveState)
 	taskReceivingThread.start()
 	stateReceivingThread.start()
+	sendTask(None)
 	taskReceivingThread.join()
 	stateReceivingThread.join()
 
 	
 if __name__ == "__main__":
-    main()
+    main(sys.argv)
