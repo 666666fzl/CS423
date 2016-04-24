@@ -76,6 +76,7 @@ def receiveTaskCallback(ch, method, properties, body):
 
 def calculateTask(task):
 	task.compute()
+	time.sleep(0.5) #throttling
 
 
 def sendState(message):
@@ -143,10 +144,10 @@ def state_manager(hardware_monitor):
 		time.sleep(1)
 
 def main(argv):
-	parser = argparse.ArgumentParser()
-	parser.add_argument("throttling_value")
-	args = parser.parse_args()
-	hardware_monitor = HardwareMonitor(args.throttling_value)
+	#parser = argparse.ArgumentParser()
+	#parser.add_argument("throttling_value")
+	#args = parser.parse_args()
+	hardware_monitor = HardwareMonitor(0.75)#args.throttling_value)
 	global STATE_DESTINATION, STATE_SOURCE, TASK_DESTINATION, TASK_SOURCE, REMOTE_IP, LOCAL_IP
 	isLocal = sys.argv[1]
 	if isLocal == 'true':
