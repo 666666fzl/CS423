@@ -7,7 +7,7 @@ import pickle
 from job import Job
 
 LOCAL_IP = '172.22.146.196'
-REMOTE_IP = '172.22.146.245'
+REMOTE_IP = '127.0.0.1'
 QUEUE_THRESHOLD = 400
 MY_TASK_QUEUE = None 
 TASK_CONNECTION = None
@@ -40,17 +40,33 @@ def sendTask(task):
 	channel.queue_declare(queue=TASK_DESTINATION, durable=True)
 	wow = {'Name': 'Zara', 'Age': 7, 'Class': 'First'};
 	sendable = pickle.dumps(wow)
-	message = sendable
+
+	myJob1 = Job(0, 5, [1,2,3,4,5])
+	myJob2 = Job(0, 5, [1,2,3,4,6])
+
+	message = pickle.dumps(myJob1)
+
 	channel.basic_publish(exchange='',
 	                      routing_key=TASK_DESTINATION,
 	                      body=message,
 	                      properties=pika.BasicProperties(
 	                         delivery_mode = 2, # make message persistent
 	                      ))
+
+	message = pickle.dumps(myJob2)
+
+	channel.basic_publish(exchange='',
+	                      routing_key=TASK_DESTINATION,
+	                      body=message,
+	                      properties=pika.BasicProperties(
+	                         delivery_mode = 2, # make message persistent
+	                      ))
+
 	print(" [TASK] Sent %r" % message)
 	connection.close()
 
 def receiveTask():
+	print(LOCAL_IP)
 	connection = pika.BlockingConnection(pika.ConnectionParameters(
 	        host=LOCAL_IP))
 	channel = connection.channel()
@@ -65,6 +81,7 @@ def receiveTask():
 	channel.basic_consume(receiveTaskCallback,
 	                      queue=TASK_SOURCE)
 	channel.start_consuming()
+
 
 def receiveTaskCallback(ch, method, properties, body):
 	task = pickle.loads(body)
@@ -139,11 +156,14 @@ def main(argv):
 
 	taskReceivingThread = threading.Thread(target=receiveTask)
 	stateReceivingThread = threading.Thread(target=receiveState)
+	taskReceivingThread.daemon = True
+	stateReceivingThread.daemon = True
 	taskReceivingThread.start()
 	stateReceivingThread.start()
-	taskReceivingThread.join()
-	stateReceivingThread.join()
+	sendTask(None);
 
+	while True:
+		time.sleep(1)
 	
 if __name__ == "__main__":
     main(sys.argv)
