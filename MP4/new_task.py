@@ -1,4 +1,4 @@
-# local
+# remote
 import pika
 import sys
 import time
@@ -7,7 +7,7 @@ import pickle
 from job import Job
 
 LOCAL_IP = '172.22.146.196'
-REMOTE_IP = '172.22.146.245'
+REMOTE_IP = '172.17.82.56'
 QUEUE_THRESHOLD = 400
 MY_TASK_QUEUE = None 
 TASK_CONNECTION = None
@@ -68,13 +68,15 @@ def receiveTask():
 
 def receiveTaskCallback(ch, method, properties, body):
 	task = pickle.loads(body)
-	print(task)
+	print('[TASK] Received: ', task)
 	taskReceivingThread = threading.Thread(target=calculateTask, args=(task,))
+	taskReceivingThread.start()
 	ch.basic_ack(delivery_tag = method.delivery_tag)
 
 def calculateTask(task):
+	print (task.data_vector)
 	task.compute()
-
+	print ('[TASK] Processed: ', task.data_vector)
 
 def sendState():
 	connection = pika.BlockingConnection(pika.ConnectionParameters(
@@ -98,8 +100,6 @@ def receiveState():
 	connection = pika.BlockingConnection(pika.ConnectionParameters(
 	        host=LOCAL_IP))
 	channel = connection.channel()
-
-
 
 	channel.queue_declare(queue=STATE_SOURCE, durable=True)
 	print(' [STATE] Waiting for state. To exit press CTRL+C')
@@ -141,6 +141,7 @@ def main(argv):
 	stateReceivingThread = threading.Thread(target=receiveState)
 	taskReceivingThread.start()
 	stateReceivingThread.start()
+	print("here")
 	taskReceivingThread.join()
 	stateReceivingThread.join()
 
