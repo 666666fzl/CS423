@@ -1,11 +1,13 @@
 import logging
 import time
+import pickle
 
 def worker_thread(job_queue, adaptor, results):
 	logging.info("Worker thread started")
 
 	throttling = adaptor.get_throttling()
-	job = job_queue.get_job()
+	jobstr = job_queue.get_job()
+	job = pickle.loads(jobstr)
 
 	start_time = time.time()
 	job.compute()
