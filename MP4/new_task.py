@@ -151,9 +151,17 @@ def bootstrap(work):
 	jobs_for_local = []
 	jobs_for_remote = []
 	for i in xrange(0, TOTAL_JOB_NUM)
-		data_vector = 
 		curr_job = Job(start_idx, length, data_vector)
 	#TODO
+	sendConnection = pika.BlockingConnection(pika.ConnectionParameters(
+            host=LOCAL_IP))
+	sendHelper(sendConnection, jobs_for_local, 'task', TASK_DESTINATION)
+	sendConnection.close()
+	sendConnection = pika.BlockingConnection(pika.ConnectionParameters(
+            host=REMOTE_IP))
+	sendHelper(sendConnection, jobs_for_remote, 'task', TASK_SOURCE)
+	sendConnection.close()
+
 
 def aggregation():
 	logging.info("Aggregation phase started")
