@@ -8,6 +8,7 @@ import argparse
 import logging
 from job import Job
 from hardware_monitor import HardwareMonitor
+from enum import Enum
 
 LOCAL_IP = '172.22.146.196'
 REMOTE_IP = '172.17.82.56'
@@ -24,54 +25,88 @@ TASK_SOURCE = 'remote_task_queue'
 STATE_DESTINATION = 'local_state_queue'
 STATE_SOURCE = 'remote_state_queue'
 
-# class myThread (threading.Thread):
-# 	def __init__(self, threadID, name, counter):
-# 		threading.Thread.__init__(self)
-# 		self.threadID = threadID
-# 		self.name = name
-# 		self.counter = counter
+class MsgType(Enum):
+	task = 'TASK'
+	finishedTASK = 'FINISHED TASK'
+	state = 'STATE'
 
-# 	def run(self):
-# 		print "Starting " + self.name
-# 		receiveTask()
-# 		print "Exiting " + self.name
-
-
-def sendTask(taskArr):
-	connection = pika.BlockingConnection(pika.ConnectionParameters(
-	        host=REMOTE_IP))
+def sendHelper(connection, taskArr, msgType, destination):
+	# connection = pika.BlockingConnection(pika.ConnectionParameters(
+	#         host=REMOTE_IP))
 	channel = connection.channel()
 
-	channel.queue_declare(queue=TASK_DESTINATION, durable=True)
+	channel.queue_declare(queue=destination, durable=True)
 
 	for task in taskArr:
 		message = pickle.dumps(task)
 		channel.basic_publish(exchange='',
-		                      routing_key=TASK_DESTINATION,
+		                      routing_key=destination,
 		                      body=message,
 		                      properties=pika.BasicProperties(
 		                         delivery_mode = 2, # make message persistent
 		                      ))
 
-	print(" [TASK] Sent %r" % message)
-	connection.close()
+	print(" [" + msgType.value + "] Sent %r" % message)
+	# connection.close()
 
-def receiveTask():
-	print(LOCAL_IP)
-	connection = pika.BlockingConnection(pika.ConnectionParameters(
-	        host=LOCAL_IP))
+def receiveHelper(connection, msgType, callback, source):
+	# connection = pika.BlockingConnection(pika.ConnectionParameters(
+	#         host=LOCAL_IP))
+
 	channel = connection.channel()
+	
+	queue = channel.queue_declare(queue=source, durable=True)
 
-	TASK_CONNECTION = connection
-	TASK_CHANNEL = channel
+	if msgType.value == 'task' and TASK_CHANNEL is None:
+		TASK_CHANNEL = channel
 
-	MY_TASK_QUEUE = channel.queue_declare(queue=TASK_SOURCE, durable=True)
-	print(' [TASK] Waiting for messages. To exit press CTRL+C')
+	if msgType.value == 'task' and MY_TASK_QUEUE is None:
+		MY_TASK_QUEUE = queue
+
+
+	print(' [' + msgType.value + '] Waiting. To exit press CTRL+C')
 
 	channel.basic_qos(prefetch_count=1)
-	channel.basic_consume(receiveTaskCallback,
-	                      queue=TASK_SOURCE)
+	channel.basic_consume(callback,
+	                      queue=source)
 	channel.start_consuming()
+
+
+# def sendTask(taskArr):
+# 	connection = pika.BlockingConnection(pika.ConnectionParameters(
+# 	        host=REMOTE_IP))
+# 	channel = connection.channel()
+
+# 	channel.queue_declare(queue=TASK_DESTINATION, durable=True)
+
+# 	for task in taskArr:
+# 		message = pickle.dumps(task)
+# 		channel.basic_publish(exchange='',
+# 		                      routing_key=TASK_DESTINATION,
+# 		                      body=message,
+# 		                      properties=pika.BasicProperties(
+# 		                         delivery_mode = 2, # make message persistent
+# 		                      ))
+
+# 	print(" [TASK] Sent %r" % message)
+# 	connection.close()
+
+# def receiveTask():
+# 	print(LOCAL_IP)
+# 	connection = pika.BlockingConnection(pika.ConnectionParameters(
+# 	        host=LOCAL_IP))
+# 	channel = connection.channel()
+
+# 	TASK_CONNECTION = connection
+# 	TASK_CHANNEL = channel
+
+# 	MY_TASK_QUEUE = channel.queue_declare(queue=TASK_SOURCE, durable=True)
+# 	print(' [TASK] Waiting for messages. To exit press CTRL+C')
+
+# 	channel.basic_qos(prefetch_count=1)
+# 	channel.basic_consume(receiveTaskCallback,
+# 	                      queue=TASK_SOURCE)
+# 	channel.start_consuming()
 
 
 def receiveTaskCallback(ch, method, properties, body):
@@ -80,12 +115,6 @@ def receiveTaskCallback(ch, method, properties, body):
 	taskReceivingThread = threading.Thread(target=worker_thread, args=(task,))
 	taskReceivingThread.start()
 	ch.basic_ack(delivery_tag = method.delivery_tag)
-
-#def calculateTask(task):
-#	print (task.data_vector)
-#	task.compute()
-#	print ('[TASK] Processed: ', task.data_vector)
-#	time.sleep(0.5) #throttling
 
 
 def worker_thread(job):
@@ -103,45 +132,47 @@ def worker_thread(job):
 	logging.warning("Worker thread will sleep for %f seconds..." % sleeping_time)
 	time.sleep(sleeping_time)
 
-def sendState(message):
-	connection = pika.BlockingConnection(pika.ConnectionParameters(
-	        host=REMOTE_IP))
-	channel = connection.channel()
+# def sendState(message):
+# 	connection = pika.BlockingConnection(pika.ConnectionParameters(
+# 	        host=REMOTE_IP))
+# 	channel = connection.channel()
 
-	channel.queue_declare(queue=STATE_DESTINATION, durable=True)
+# 	channel.queue_declare(queue=STATE_DESTINATION, durable=True)
 
 
-	channel.basic_publish(exchange='',
-	                      routing_key=STATE_DESTINATION,
-	                      body=message,
-	                      properties=pika.BasicProperties(
-	                         delivery_mode = 2, # make message persistent
-	                      ))
-	print(" [x] Sent %r" % message)
-	connection.close()
+# 	channel.basic_publish(exchange='',
+# 	                      routing_key=STATE_DESTINATION,
+# 	                      body=message,
+# 	                      properties=pika.BasicProperties(
+# 	                         delivery_mode = 2, # make message persistent
+# 	                      ))
+# 	print(" [x] Sent %r" % message)
+# 	connection.close()
 
-def receiveState():
-	connection = pika.BlockingConnection(pika.ConnectionParameters(
-	        host=LOCAL_IP))
-	channel = connection.channel()
+# def receiveState():
+# 	connection = pika.BlockingConnection(pika.ConnectionParameters(
+# 	        host=LOCAL_IP))
+# 	channel = connection.channel()
 
-	channel.queue_declare(queue=STATE_SOURCE, durable=True)
-	print(' [STATE] Waiting for state. To exit press CTRL+C')
+# 	channel.queue_declare(queue=STATE_SOURCE, durable=True)
+# 	print(' [STATE] Waiting for state. To exit press CTRL+C')
 
-	def callback(ch, method, properties, body):
-		printable = pickle.loads(body)
-		print(" [STATE] Received %r" % printable)
-		time.sleep(body.count(b'.'))
-		print(" [STATE] Done")
-		ch.basic_ack(delivery_tag = method.delivery_tag)
+# 	channel.basic_qos(prefetch_count=1)
+# 	channel.basic_consume(receiveStateCallback,
+# 	                      queue=STATE_SOURCE)
+# 	channel.start_consuming()
 
-	channel.basic_qos(prefetch_count=1)
-	channel.basic_consume(callback,
-	                      queue=STATE_SOURCE)
-	channel.start_consuming()
-
+def receiveStateCallback(ch, method, properties, body):
+	printable = pickle.loads(body)
+	print(" [STATE] Received %r" % printable)
+	time.sleep(body.count(b'.'))
+	print(" [STATE] Done")
+	ch.basic_ack(delivery_tag = method.delivery_tag)
 
 def adaptor():
+	global MY_TASK_QUEUE, TASK_CHANNEL
+	while MY_TASK_QUEUE is None:
+		time.sleep(1)
 	curLen = MY_TASK_QUEUE.method.message_count
 	if curLen > QUEUE_THRESHOLD:
 		numTransfer = curLen - QUEUE_THRESHOLD
@@ -150,7 +181,11 @@ def adaptor():
 			curTask = TASK_CHANNEL.basic_get(queue='remote_state_queue')
 			taskArr.append(curTask)
 			numTransfer -= 1
-		sendTask(taskArr)
+
+		sendConnection = pika.BlockingConnection(pika.ConnectionParameters(
+        	host=REMOTE_IP))
+		sendHelper(sendConnection, taskArr, MsgType.task, TASK_DESTINATION)
+		sendConnection.close()
 
 class SystemState:
 	def __init__(self, job_queue, hardware_monitor):
@@ -163,11 +198,14 @@ def state_manager(hardware_monitor):
 	while MY_TASK_QUEUE is None:
 		time.sleep(1)
 
+	sendConnection = pika.BlockingConnection(pika.ConnectionParameters(
+        	host=REMOTE_IP))
 	while True:
 		state = SystemState(MY_TASK_QUEUE, hardware_monitor)
 		statestr = pickle.dumps(state)
-		sendState(statestr)
+		sendHelper(sendConnection, [state], MsgType.state, STATE_DESTINATION)
 		time.sleep(1)
+	sendConnection.close()
 
 def bootstrap():
 	pass
@@ -181,7 +219,7 @@ def aggregation():
 	#TODO: get results
 
 	fp = open('result.data', 'w+')
-	print result, fp.name
+	#print result, fp.name
 	fp.close()
 
 	logging.info("Aggregation phase ended")
@@ -198,17 +236,24 @@ def main(argv):
 		TASK_DESTINATION, TASK_SOURCE = TASK_SOURCE, TASK_DESTINATION
 		REMOTE_IP, LOCAL_IP = LOCAL_IP, REMOTE_IP
 
-	taskReceivingThread = threading.Thread(target=receiveTask)
-	stateReceivingThread = threading.Thread(target=receiveState)
+	receiveTaskConnection = pika.BlockingConnection(pika.ConnectionParameters(
+        host=LOCAL_IP))
+	receiveStateConnection = pika.BlockingConnection(pika.ConnectionParameters(
+        host=LOCAL_IP))
+	taskReceivingThread = threading.Thread(target=receiveHelper, args=(receiveTaskConnection, MsgType.task, receiveTaskCallback, TASK_SOURCE))
+	stateReceivingThread = threading.Thread(target=receiveHelper, args=(receiveStateConnection, MsgType.state, receiveStateCallback, STATE_SOURCE))
 	stateManagerThread = threading.Thread(target=state_manager, args=(hardware_monitor,))
+	adaptorThread = threading.Thread(target=adaptor)
 
 	taskReceivingThread.daemon = True
 	stateReceivingThread.daemon = True
 	stateManagerThread.daemon = True
-	
+	adaptorThread.daemon = True
+
 	taskReceivingThread.start()
 	stateReceivingThread.start()
 	stateManagerThread.start()
+	adaptorThread.start()
 
 	bootstrap()
 	processing()
