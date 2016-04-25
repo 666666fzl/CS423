@@ -10,4 +10,4 @@ class HardwareMonitor:
 		return self.cpu_use
 
 	def get_throttling(self):
-        return self.cpu_throttling
+		return self.throttling

@@ -37,35 +37,21 @@ STATE_SOURCE = 'remote_state_queue'
 # 		print "Exiting " + self.name
 
 
-def sendTask(task):
+def sendTask(taskArr):
 	connection = pika.BlockingConnection(pika.ConnectionParameters(
 	        host=REMOTE_IP))
 	channel = connection.channel()
 
 	channel.queue_declare(queue=TASK_DESTINATION, durable=True)
-	wow = {'Name': 'Zara', 'Age': 7, 'Class': 'First'};
-	sendable = pickle.dumps(wow)
 
-	myJob1 = Job(0, 5, [1,2,3,4,5])
-	myJob2 = Job(0, 5, [1,2,3,4,6])
-
-	message = pickle.dumps(myJob1)
-
-	channel.basic_publish(exchange='',
-	                      routing_key=TASK_DESTINATION,
-	                      body=message,
-	                      properties=pika.BasicProperties(
-	                         delivery_mode = 2, # make message persistent
-	                      ))
-
-	message = pickle.dumps(myJob2)
-
-	channel.basic_publish(exchange='',
-	                      routing_key=TASK_DESTINATION,
-	                      body=message,
-	                      properties=pika.BasicProperties(
-	                         delivery_mode = 2, # make message persistent
-	                      ))
+	for task in taskArr:
+		message = pickle.dumps(task)
+		channel.basic_publish(exchange='',
+		                      routing_key=TASK_DESTINATION,
+		                      body=message,
+		                      properties=pika.BasicProperties(
+		                         delivery_mode = 2, # make message persistent
+		                      ))
 
 	print(" [TASK] Sent %r" % message)
 	connection.close()
