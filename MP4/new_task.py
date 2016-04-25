@@ -43,8 +43,8 @@ def sendHelper(connection, taskArr, msgType, destination):
 		                      properties=pika.BasicProperties(
 		                         delivery_mode = 2, # make message persistent
 		                      ))
-
-	print(" [" + msgType + "] Sent %r" % message)
+	if msgType!='state':
+		print(" [" + msgType + "] Sent %r" % message)
 
 
 def receiveHelper(connection, msgType, callback, source):
@@ -60,7 +60,8 @@ def receiveHelper(connection, msgType, callback, source):
 	if msgType == 'task' and MY_TASK_QUEUE is None:
 		MY_TASK_QUEUE = queue
 
-	print(' [' + msgType + '] Waiting. To exit press CTRL+C')
+	if msgType!='state':
+		print(' [' + msgType + '] Waiting. To exit press CTRL+C')
 
 	channel.basic_qos(prefetch_count=1)
 	channel.basic_consume(callback,
@@ -78,14 +79,14 @@ def receiveTaskCallback(ch, method, properties, body):
 
 def worker_thread(job):
 	global THROTTLING, COMPLETED_JOBS, IS_LOCAL, TOTAL_JOB_NUM
-	logging.info("Worker thread started with ", job.data_vector)
+	logging.info("Worker thread started with ", job.id)
 
 	start_time = time.time()
 	job.compute()
 	COMPLETED_JOBS.append(job)
 	end_time = time.time()
 
-	logging.info("Worker thread job finished with", job.data_vector)
+	logging.info("Worker thread job finished with", job.id)
 
 	if not(IS_LOCAL):
 		sendConnection = pika.BlockingConnection(pika.ConnectionParameters(
@@ -94,7 +95,7 @@ def worker_thread(job):
 		sendConnection.close()
 	if IS_LOCAL:
 		TOTAL_JOB_NUM -= 1
-		fp = open('result.data', a)
+		fp = open('result.data', 'a')
 		fp.write(job)
 
 	sleeping_time = (end_time - start_time) * (1 - THROTTLING)
@@ -104,9 +105,9 @@ def worker_thread(job):
 
 def receiveStateCallback(ch, method, properties, body):
 	printable = pickle.loads(body)
-	print(" [STATE] Received %r" % printable)
-	time.sleep(body.count(b'.'))
-	print(" [STATE] Done")
+	# print(" [STATE] Received %r" % printable)
+	# time.sleep(body.count(b'.'))
+	# print(" [STATE] Done")
 	ch.basic_ack(delivery_tag = method.delivery_tag)
 
 
