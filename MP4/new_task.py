@@ -134,7 +134,9 @@ def adaptor():
 
 	while True:	
 		curLen = MY_TASK_QUEUE.method.message_count
+		#print(MY_TASK_QUEUE)
 		if curLen > QUEUE_THRESHOLD:
+			print ("++++++++++++++++++++++++++++++")
 			numTransfer = curLen - QUEUE_THRESHOLD
 			taskArr = []
 			while numTransfer>0:
@@ -246,6 +248,7 @@ def main(argv):
 		bootstrap(work)
 		while TOTAL_JOB_NUM>0:
 			time.sleep(1)
+
 		aggregation()
 	else:
 		while True:
