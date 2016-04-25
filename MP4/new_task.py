@@ -57,7 +57,7 @@ def receiveHelper(connection, msgType, callback, source):
 	
 	queue = channel.queue_declare(queue=source, durable=True)
 
-	print msgType
+	global TASK_CHANNEL, MY_TASK_QUEUE
 
 	if msgType == 'task' and TASK_CHANNEL is None:
 		TASK_CHANNEL = channel
@@ -192,8 +192,8 @@ def adaptor():
 class SystemState:
 	def __init__(self, job_queue, hardware_monitor):
 		self.num_job = job_queue.method.message_count
-		self.throttling = hardware_monitor.get_throttling
-		self.cpu_use = hardware_monitor.get_cpu_info  
+		self.throttling = hardware_monitor.get_throttling()
+		self.cpu_use = hardware_monitor.get_cpu_info()
 
 def state_manager(hardware_monitor):
 	# peiodic policy
