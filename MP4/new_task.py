@@ -29,6 +29,7 @@ STATE_SOURCE = 'remote_state_queue'
 RESULT_SOURCE = 'local_result_queue'
 IS_LOCAL = False
 
+
 def sendHelper(connection, taskArr, msgType, destination):
 	channel = connection.channel()
 
@@ -45,6 +46,7 @@ def sendHelper(connection, taskArr, msgType, destination):
 
 	print(" [" + msgType + "] Sent %r" % message)
 
+
 def receiveHelper(connection, msgType, callback, source):
 	channel = connection.channel()
 	
@@ -58,13 +60,13 @@ def receiveHelper(connection, msgType, callback, source):
 	if msgType == 'task' and MY_TASK_QUEUE is None:
 		MY_TASK_QUEUE = queue
 
-
 	print(' [' + msgType + '] Waiting. To exit press CTRL+C')
 
 	channel.basic_qos(prefetch_count=1)
 	channel.basic_consume(callback,
 	                      queue=source)
 	channel.start_consuming()
+
 
 def receiveTaskCallback(ch, method, properties, body):
 	task = pickle.loads(body)
@@ -107,6 +109,7 @@ def receiveStateCallback(ch, method, properties, body):
 	print(" [STATE] Done")
 	ch.basic_ack(delivery_tag = method.delivery_tag)
 
+
 def receiveResultCallback(ch, method, properties, body):
 	global TOTAL_JOB_NUM
 	TOTAL_JOB_NUM -= 1
@@ -134,11 +137,13 @@ def adaptor():
 		sendHelper(sendConnection, taskArr, 'task', TASK_DESTINATION)
 		sendConnection.close()
 
+
 class SystemState:
 	def __init__(self, job_queue, hardware_monitor):
 		self.num_job = job_queue.method.message_count
 		self.throttling = hardware_monitor.get_throttling()
 		self.cpu_use = hardware_monitor.get_cpu_info()
+
 
 def state_manager(hardware_monitor):
 	# peiodic policy
@@ -154,6 +159,7 @@ def state_manager(hardware_monitor):
 		time.sleep(1)
 	sendConnection.close()
 
+
 def bootstrap(work):
 	global TOTAL_ELEMENT_NUM, TOTAL_JOB_NUM
 	jobs_for_local = []
@@ -166,7 +172,7 @@ def bootstrap(work):
 	for i in xrange(TOTAL_JOB_NUM/2, TOTAL_JOB_NUM):
 		curr_job = Job(i, length, work[(i*length):((i+1)*length)])
 		jobs_for_remote.append(curr_job)
-	#TODO
+
 	sendConnection = pika.BlockingConnection(pika.ConnectionParameters(
             host=LOCAL_IP))
 	sendHelper(sendConnection, jobs_for_local, 'task', TASK_SOURCE)
@@ -178,9 +184,6 @@ def bootstrap(work):
 
 
 def aggregation():
-	global TOTAL_JOB_NUM
-	while TOTAL_JOB_NUM>0:
-		time.sleep(1)
 
 	logging.info("Aggregation phase started")
 
@@ -199,7 +202,7 @@ def main(argv):
 	#parser.add_argument("throttling_value")
 	#args = parser.parse_args()
 	hardware_monitor = HardwareMonitor(0.75)#args.throttling_value)
-	global STATE_DESTINATION, STATE_SOURCE, TASK_DESTINATION, TASK_SOURCE, REMOTE_IP, LOCAL_IP, IS_LOCAL
+	global STATE_DESTINATION, STATE_SOURCE, TASK_DESTINATION, TASK_SOURCE, REMOTE_IP, LOCAL_IP, IS_LOCAL, TOTAL_JOB_NUM
 	IS_LOCAL = (sys.argv[1] == 'true')
 	if IS_LOCAL:
 		STATE_DESTINATION, STATE_SOURCE = STATE_SOURCE, STATE_DESTINATION
@@ -232,7 +235,8 @@ def main(argv):
 	if IS_LOCAL:
 		work = [1.111111] * TOTAL_ELEMENT_NUM
 		bootstrap(work)
-		#TODO: while the work is not done, do work
+		while TOTAL_JOB_NUM>0:
+			time.sleep(1)
 		aggregation()
 	else:
 		while True:
