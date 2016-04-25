@@ -75,7 +75,7 @@ def receiveTaskCallback(ch, method, properties, body):
 
 
 def worker_thread(job):
-	global THROTTLING, COMPLETED_JOBS, IS_LOCAL
+	global THROTTLING, COMPLETED_JOBS, IS_LOCAL, TOTAL_JOB_NUM
 	logging.info("Worker thread started with ", job.data_vector)
 
 	start_time = time.time()
@@ -90,6 +90,10 @@ def worker_thread(job):
 	    	host=REMOTE_IP))
 		sendHelper(sendConnection, [job], 'result', RESULT_SOURCE)
 		sendConnection.close()
+	if IS_LOCAL:
+		TOTAL_JOB_NUM -= 1
+		fp = open('result.data', a)
+		fp.write(job)
 
 	sleeping_time = (end_time - start_time) * (1 - THROTTLING)
 	logging.warning("Worker thread will sleep for %f seconds..." % sleeping_time)
@@ -104,9 +108,12 @@ def receiveStateCallback(ch, method, properties, body):
 	ch.basic_ack(delivery_tag = method.delivery_tag)
 
 def receiveResultCallback(ch, method, properties, body):
+	global TOTAL_JOB_NUM
+	TOTAL_JOB_NUM -= 1
 	result = pickle.loads(body)
 	fp = open('result.data', a)
 	fp.write(result)
+	ch.basic_ack(delivery_tag = method.delivery_tag)
 
 
 def adaptor():
@@ -150,19 +157,25 @@ def state_manager(hardware_monitor):
 def bootstrap(work):
 	jobs_for_local = []
 	jobs_for_remote = []
-	for i in xrange(0, TOTAL_JOB_NUM)
+	for i in range(0, TOTAL_JOB_NUM):
 		data_vector = 
 		curr_job = Job(start_idx, length, data_vector)
 	#TODO
 
 def aggregation():
+	global TOTAL_JOB_NUM
+	while TOTAL_JOB_NUM>0:
+		time.sleep(1)
+
 	logging.info("Aggregation phase started")
 
 	#TODO: get results
 
-	fp = open('result.data', 'w+')
-	#print result, fp.name
-	fp.close()
+	with open('result.data', 'r') as fi:
+		for line in fi:
+			print (line)
+
+	fi.close()
 
 	logging.info("Aggregation phase ended")
 
@@ -177,16 +190,17 @@ def main(argv):
 		STATE_DESTINATION, STATE_SOURCE = STATE_SOURCE, STATE_DESTINATION
 		TASK_DESTINATION, TASK_SOURCE = TASK_SOURCE, TASK_DESTINATION
 		REMOTE_IP, LOCAL_IP = LOCAL_IP, REMOTE_IP
+		receiveResultConnection = pika.BlockingConnection(pika.ConnectionParameters(
+        	host=LOCAL_IP))
+		resultReceivingThread = threading.Thread(target=receiveHelper, args=(receiveResultConnection, 'result', receiveResultCallback, RESULT_SOURCE))
 
 	receiveTaskConnection = pika.BlockingConnection(pika.ConnectionParameters(
         host=LOCAL_IP))
 	receiveStateConnection = pika.BlockingConnection(pika.ConnectionParameters(
         host=LOCAL_IP))
-	receiveResultConnection = pika.BlockingConnection(pika.ConnectionParameters(
-        host=LOCAL_IP))
+
 	taskReceivingThread = threading.Thread(target=receiveHelper, args=(receiveTaskConnection, 'task', receiveTaskCallback, TASK_SOURCE))
 	stateReceivingThread = threading.Thread(target=receiveHelper, args=(receiveStateConnection, 'state', receiveStateCallback, STATE_SOURCE))
-	resultReceivingThread = threading.Thread(target=receiveHelper, args=(receiveResultConnection, 'result', receiveResultCallback, RESULT_SOURCE))
 	stateManagerThread = threading.Thread(target=state_manager, args=(hardware_monitor,))
 	adaptorThread = threading.Thread(target=adaptor)
 
