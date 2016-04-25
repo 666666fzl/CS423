@@ -9,7 +9,7 @@ from job import Job
 from hardware_monitor import HardwareMonitor
 
 LOCAL_IP = '172.22.146.196'
-REMOTE_IP = '127.0.0.1'
+REMOTE_IP = '172.17.82.56'
 QUEUE_THRESHOLD = 400
 MY_TASK_QUEUE = None 
 TASK_CONNECTION = None
@@ -92,7 +92,9 @@ def receiveTaskCallback(ch, method, properties, body):
 	ch.basic_ack(delivery_tag = method.delivery_tag)
 
 def calculateTask(task):
+	print (task.data_vector)
 	task.compute()
+	print ('[TASK] Processed: ', task.data_vector)
 	time.sleep(0.5) #throttling
 
 
@@ -103,11 +105,10 @@ def sendState(message):
 
 	channel.queue_declare(queue=STATE_DESTINATION, durable=True)
 
-	curState = _get_state_;
 
 	channel.basic_publish(exchange='',
 	                      routing_key=STATE_DESTINATION,
-	                      body=curState,
+	                      body=message,
 	                      properties=pika.BasicProperties(
 	                         delivery_mode = 2, # make message persistent
 	                      ))
@@ -154,8 +155,11 @@ class SystemState:
 
 def state_manager(hardware_monitor):
 	# peiodic policy
+	while MY_TASK_QUEUE is None:
+		time.sleep(1)
+
 	while True:
-		state = SystemState(hardware_monitor)
+		state = SystemState(MY_TASK_QUEUE, hardware_monitor)
 		statestr = pickle.dumps(state)
 		sendState(statestr)
 		time.sleep(1)
