@@ -13,6 +13,8 @@ from enum import Enum
 LOCAL_IP = '172.22.146.196'
 REMOTE_IP = '172.17.82.56'
 
+TOTAL_ELEMENT_NUM = 1024 * 1024 * 4
+TOTAL_JOB_NUM = 512
 QUEUE_THRESHOLD = 400
 MY_TASK_QUEUE = None 
 TASK_CONNECTION = None
@@ -145,11 +147,13 @@ def state_manager(hardware_monitor):
 		time.sleep(1)
 	sendConnection.close()
 
-def bootstrap():
-	pass
-
-def processing():
-	pass
+def bootstrap(work):
+	jobs_for_local = []
+	jobs_for_remote = []
+	for i in xrange(0, TOTAL_JOB_NUM)
+		data_vector = 
+		curr_job = Job(start_idx, length, data_vector)
+	#TODO
 
 def aggregation():
 	logging.info("Aggregation phase started")
@@ -168,9 +172,8 @@ def main(argv):
 	#args = parser.parse_args()
 	hardware_monitor = HardwareMonitor(0.75)#args.throttling_value)
 	global STATE_DESTINATION, STATE_SOURCE, TASK_DESTINATION, TASK_SOURCE, REMOTE_IP, LOCAL_IP, IS_LOCAL
-	isLocal = sys.argv[1]
-	IS_LOCAL = isLocal
-	if isLocal == 'true':
+	IS_LOCAL = (sys.argv[1] == 'true')
+	if IS_LOCAL:
 		STATE_DESTINATION, STATE_SOURCE = STATE_SOURCE, STATE_DESTINATION
 		TASK_DESTINATION, TASK_SOURCE = TASK_SOURCE, TASK_DESTINATION
 		REMOTE_IP, LOCAL_IP = LOCAL_IP, REMOTE_IP
@@ -197,12 +200,14 @@ def main(argv):
 	stateManagerThread.start()
 	adaptorThread.start()
 
-	bootstrap()
-	processing()
-	aggregation()
-
-	while True:
-		time.sleep(1)
+	if IS_LOCAL:
+		work = [1.111111] * TOTAL_ELEMENT_NUM
+		bootstrap(work)
+		#TODO: while the work is not done, do work
+		aggregation()
+	else:
+		while True:
+			time.sleep(1)
 	
 if __name__ == "__main__":
     main(sys.argv)
