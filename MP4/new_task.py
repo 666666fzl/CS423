@@ -1,20 +1,23 @@
-# local
+# remote
 import pika
 import sys
 import time
 import threading
 import pickle
 import argparse
+import logging
 from job import Job
 from hardware_monitor import HardwareMonitor
 
 LOCAL_IP = '172.22.146.196'
 REMOTE_IP = '172.17.82.56'
+
 QUEUE_THRESHOLD = 400
 MY_TASK_QUEUE = None 
 TASK_CONNECTION = None
 TASK_CHANNEL = None
 TASK_THREADS = []
+COMPLETED_JOBS = []
 THROTTLING = 1
 TASK_DESTINATION = 'local_task_queue'
 TASK_SOURCE = 'remote_task_queue'
@@ -87,16 +90,32 @@ def receiveTask():
 
 def receiveTaskCallback(ch, method, properties, body):
 	task = pickle.loads(body)
-	print(task)
-	taskReceivingThread = threading.Thread(target=calculateTask, args=(task,))
+	print('[TASK] Received: ', task)
+	taskReceivingThread = threading.Thread(target=worker_thread, args=(task,))
+	taskReceivingThread.start()
 	ch.basic_ack(delivery_tag = method.delivery_tag)
 
-def calculateTask(task):
-	print (task.data_vector)
-	task.compute()
-	print ('[TASK] Processed: ', task.data_vector)
-	time.sleep(0.5) #throttling
+#def calculateTask(task):
+#	print (task.data_vector)
+#	task.compute()
+#	print ('[TASK] Processed: ', task.data_vector)
+#	time.sleep(0.5) #throttling
 
+
+def worker_thread(job):
+	global THROTTLING, COMPLETED_JOBS
+	logging.info("Worker thread started with ", job.data_vector)
+
+	start_time = time.time()
+	job.compute()
+	COMPLETED_JOBS.extend(job)
+	end_time = time.time()
+
+	logging.info("Worker thread job finished with", job.data_vector)
+
+	sleeping_time = (end_time - start_time) * (1 - THROTTLING)
+	logging.warning("Worker thread will sleep for %f seconds..." % sleeping_time)
+	time.sleep(sleeping_time)
 
 def sendState(message):
 	connection = pika.BlockingConnection(pika.ConnectionParameters(
@@ -164,6 +183,23 @@ def state_manager(hardware_monitor):
 		sendState(statestr)
 		time.sleep(1)
 
+def bootstrap():
+	pass
+
+def processing():
+	pass
+
+def aggregation():
+	logging.info("Aggregation phase started")
+
+	#TODO: get results
+
+	fp = open('result.data', 'w+')
+	print result, fp.name
+	fp.close()
+
+	logging.info("Aggregation phase ended")
+
 def main(argv):
 	#parser = argparse.ArgumentParser()
 	#parser.add_argument("throttling_value")
@@ -188,7 +224,9 @@ def main(argv):
 	stateReceivingThread.start()
 	stateManagerThread.start()
 
-	sendTask(None);
+	bootstrap()
+	processing()
+	aggregation()
 
 	while True:
 		time.sleep(1)
