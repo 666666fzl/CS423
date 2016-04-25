@@ -184,26 +184,23 @@ def bootstrap(work):
 
 
 def aggregation():
-
 	logging.info("Aggregation phase started")
-
-	#TODO: get results
 
 	with open('result.data', 'r') as fi:
 		for line in fi:
 			print (line)
-
 	fi.close()
-
 	logging.info("Aggregation phase ended")
 
 def main(argv):
-	#parser = argparse.ArgumentParser()
-	#parser.add_argument("throttling_value")
-	#args = parser.parse_args()
-	hardware_monitor = HardwareMonitor(0.75)#args.throttling_value)
+	parser = argparse.ArgumentParser()
+	parser.add_argument('throttling_value', type=float)
+	parser.add_argument('is_local', type=bool)
+	args = parser.parse_args()
+
+	hardware_monitor = HardwareMonitor(args.throttling_value)
 	global STATE_DESTINATION, STATE_SOURCE, TASK_DESTINATION, TASK_SOURCE, REMOTE_IP, LOCAL_IP, IS_LOCAL, TOTAL_JOB_NUM
-	IS_LOCAL = (sys.argv[1] == 'true')
+	IS_LOCAL = args.is_local
 	if IS_LOCAL:
 		STATE_DESTINATION, STATE_SOURCE = STATE_SOURCE, STATE_DESTINATION
 		TASK_DESTINATION, TASK_SOURCE = TASK_SOURCE, TASK_DESTINATION
