@@ -46,7 +46,7 @@ def sendHelper(connection, taskArr, msgType, destination):
 		                         delivery_mode = 2, # make message persistent
 		                      ))
 
-	print(" [" + msgType.value + "] Sent %r" % message)
+	print(" [" + msgType + "] Sent %r" % message)
 	# connection.close()
 
 def receiveHelper(connection, msgType, callback, source):
@@ -57,14 +57,16 @@ def receiveHelper(connection, msgType, callback, source):
 	
 	queue = channel.queue_declare(queue=source, durable=True)
 
-	if msgType.value == 'task' and TASK_CHANNEL is None:
+	print msgType
+
+	if msgType == 'task' and TASK_CHANNEL is None:
 		TASK_CHANNEL = channel
 
-	if msgType.value == 'task' and MY_TASK_QUEUE is None:
+	if msgType == 'task' and MY_TASK_QUEUE is None:
 		MY_TASK_QUEUE = queue
 
 
-	print(' [' + msgType.value + '] Waiting. To exit press CTRL+C')
+	print(' [' + msgType + '] Waiting. To exit press CTRL+C')
 
 	channel.basic_qos(prefetch_count=1)
 	channel.basic_consume(callback,
@@ -184,7 +186,7 @@ def adaptor():
 
 		sendConnection = pika.BlockingConnection(pika.ConnectionParameters(
         	host=REMOTE_IP))
-		sendHelper(sendConnection, taskArr, MsgType.task, TASK_DESTINATION)
+		sendHelper(sendConnection, taskArr, 'task', TASK_DESTINATION)
 		sendConnection.close()
 
 class SystemState:
@@ -203,7 +205,7 @@ def state_manager(hardware_monitor):
 	while True:
 		state = SystemState(MY_TASK_QUEUE, hardware_monitor)
 		statestr = pickle.dumps(state)
-		sendHelper(sendConnection, [state], MsgType.state, STATE_DESTINATION)
+		sendHelper(sendConnection, [state], 'state', STATE_DESTINATION)
 		time.sleep(1)
 	sendConnection.close()
 
@@ -240,8 +242,8 @@ def main(argv):
         host=LOCAL_IP))
 	receiveStateConnection = pika.BlockingConnection(pika.ConnectionParameters(
         host=LOCAL_IP))
-	taskReceivingThread = threading.Thread(target=receiveHelper, args=(receiveTaskConnection, MsgType.task, receiveTaskCallback, TASK_SOURCE))
-	stateReceivingThread = threading.Thread(target=receiveHelper, args=(receiveStateConnection, MsgType.state, receiveStateCallback, STATE_SOURCE))
+	taskReceivingThread = threading.Thread(target=receiveHelper, args=(receiveTaskConnection, 'task', receiveTaskCallback, TASK_SOURCE))
+	stateReceivingThread = threading.Thread(target=receiveHelper, args=(receiveStateConnection, 'state', receiveStateCallback, STATE_SOURCE))
 	stateManagerThread = threading.Thread(target=state_manager, args=(hardware_monitor,))
 	adaptorThread = threading.Thread(target=adaptor)
 
