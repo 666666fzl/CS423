@@ -15,7 +15,7 @@ REMOTE_IP = '172.17.82.56'
 
 TOTAL_ELEMENT_NUM = 1024 * 1024 * 4
 TOTAL_JOB_NUM = 512
-QUEUE_THRESHOLD = 112
+QUEUE_THRESHOLD = 400
 MY_TASK_QUEUE = None 
 TASK_CONNECTION = None
 TASK_CHANNEL = None
@@ -207,9 +207,10 @@ def aggregation():
 def main(argv):
 	parser = argparse.ArgumentParser()
 	parser.add_argument('throttling_value', type=float)
-	parser.add_argument('is_local', type=bool)
+	#parser.add_argument('is_local', type=bool)
+	parser.add_argument('-is_local', action='store_true', default=False)
 	args = parser.parse_args()
-
+	print(args)
 	hardware_monitor = HardwareMonitor(args.throttling_value)
 	global STATE_DESTINATION, STATE_SOURCE, TASK_DESTINATION, TASK_SOURCE, REMOTE_IP, LOCAL_IP, IS_LOCAL, TOTAL_JOB_NUM, THROTTLING
 	IS_LOCAL = args.is_local
