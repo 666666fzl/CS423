@@ -15,7 +15,7 @@ REMOTE_IP = '172.17.82.56'
 
 TOTAL_ELEMENT_NUM = 1024 * 1024 * 4
 TOTAL_JOB_NUM = 512
-QUEUE_THRESHOLD = 400
+QUEUE_THRESHOLD = 112
 MY_TASK_QUEUE = None 
 TASK_CONNECTION = None
 TASK_CHANNEL = None
@@ -44,7 +44,7 @@ def sendHelper(connection, taskArr, msgType, destination):
 		                         delivery_mode = 2, # make message persistent
 		                      ))
 	if msgType!='state':
-		print(" [" + msgType + "] Sent %r" % message)
+		print(" [" + msgType + "] Sent %r" % task)
 
 
 def receiveHelper(connection, msgType, callback, source):
@@ -96,7 +96,10 @@ def worker_thread(job):
 	if IS_LOCAL:
 		TOTAL_JOB_NUM -= 1
 		fp = open('result.data', 'a')
-		fp.write(job)
+		for item in job.data_vector:
+			fp.write(str(item)+' ')
+		fp.write('\n')
+		fp.close()
 
 	sleeping_time = (end_time - start_time) * (1 - THROTTLING)
 	logging.warning("Worker thread will sleep for %f seconds..." % sleeping_time)
@@ -115,28 +118,34 @@ def receiveResultCallback(ch, method, properties, body):
 	global TOTAL_JOB_NUM
 	TOTAL_JOB_NUM -= 1
 	result = pickle.loads(body)
-	fp = open('result.data', a)
-	fp.write(result)
+	print('[RESULT] Received: ', result.id)
+	fp = open('result.data', 'a')
+	for item in result.data_vector:
+		fp.write(str(item)+' ')
+	fp.write('\n')
+	fp.close()
 	ch.basic_ack(delivery_tag = method.delivery_tag)
 
 
 def adaptor():
-	global MY_TASK_QUEUE, TASK_CHANNEL
+	global MY_TASK_QUEUE, TASK_CHANNEL, TASK_SOURCE
 	while MY_TASK_QUEUE is None:
 		time.sleep(1)
-	curLen = MY_TASK_QUEUE.method.message_count
-	if curLen > QUEUE_THRESHOLD:
-		numTransfer = curLen - QUEUE_THRESHOLD
-		taskArr = []
-		while numTransfer>0:
-			curTask = TASK_CHANNEL.basic_get(queue='remote_state_queue')
-			taskArr.append(curTask)
-			numTransfer -= 1
 
-		sendConnection = pika.BlockingConnection(pika.ConnectionParameters(
-        	host=REMOTE_IP))
-		sendHelper(sendConnection, taskArr, 'task', TASK_DESTINATION)
-		sendConnection.close()
+	while True:	
+		curLen = MY_TASK_QUEUE.method.message_count
+		if curLen > QUEUE_THRESHOLD:
+			numTransfer = curLen - QUEUE_THRESHOLD
+			taskArr = []
+			while numTransfer>0:
+				curTask = TASK_CHANNEL.basic_get(queue=TASK_SOURCE)
+				taskArr.append(curTask)
+				numTransfer -= 1
+
+			sendConnection = pika.BlockingConnection(pika.ConnectionParameters(
+	        	host=REMOTE_IP))
+			sendHelper(sendConnection, taskArr, 'task', TASK_DESTINATION)
+			sendConnection.close()
 
 
 class SystemState:
