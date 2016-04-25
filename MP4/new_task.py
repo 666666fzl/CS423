@@ -208,6 +208,8 @@ def main(argv):
 		receiveResultConnection = pika.BlockingConnection(pika.ConnectionParameters(
         	host=LOCAL_IP))
 		resultReceivingThread = threading.Thread(target=receiveHelper, args=(receiveResultConnection, 'result', receiveResultCallback, RESULT_SOURCE))
+		resultReceivingThread.daemon = True
+		resultReceivingThread.start()
 
 	receiveTaskConnection = pika.BlockingConnection(pika.ConnectionParameters(
         host=LOCAL_IP))
