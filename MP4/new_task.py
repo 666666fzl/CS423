@@ -80,7 +80,7 @@ def worker_thread(job):
 
 	start_time = time.time()
 	job.compute()
-	COMPLETED_JOBS.extend(job)
+	COMPLETED_JOBS.append(job)
 	end_time = time.time()
 
 	logging.info("Worker thread job finished with", job.data_vector)
@@ -155,12 +155,27 @@ def state_manager(hardware_monitor):
 	sendConnection.close()
 
 def bootstrap(work):
+	global TOTAL_ELEMENT_NUM, TOTAL_JOB_NUM
 	jobs_for_local = []
 	jobs_for_remote = []
-	for i in range(0, TOTAL_JOB_NUM):
-		data_vector = 
-		curr_job = Job(start_idx, length, data_vector)
+
+	length = TOTAL_ELEMENT_NUM/TOTAL_JOB_NUM
+	for i in xrange(0, TOTAL_JOB_NUM/2):
+		curr_job = Job(i, length, work[(i*length):((i+1)*length)])
+		jobs_for_local.append(curr_job)
+	for i in xrange(TOTAL_JOB_NUM/2, TOTAL_JOB_NUM):
+		curr_job = Job(i, length, work[(i*length):((i+1)*length)])
+		jobs_for_remote.append(curr_job)
 	#TODO
+	sendConnection = pika.BlockingConnection(pika.ConnectionParameters(
+            host=LOCAL_IP))
+	sendHelper(sendConnection, jobs_for_local, 'task', TASK_SOURCE)
+	sendConnection.close()
+	sendConnection = pika.BlockingConnection(pika.ConnectionParameters(
+            host=REMOTE_IP))
+	sendHelper(sendConnection, jobs_for_remote, 'task', TASK_DESTINATION)
+	sendConnection.close()
+
 
 def aggregation():
 	global TOTAL_JOB_NUM
